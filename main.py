@@ -8,16 +8,24 @@ from config import settings
 from models import create_tables, get_db, engine, Base
 from routes import auth, progress, questions, files, recommendations, subjects
 
-# 스타트업 이벤트
+# 스타트업 이벤트 (Vercel 예외 처리 적용)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 시작
-    print("서버 시작: 데이터베이스 테이블 생성 중...")
-    create_tables()
-    print("데이터베이스 초기화 완료")
-    
-    # 업로드 디렉토리 생성
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    print("서버 시작: 데이터베이스 연결 확인...")
+    try:
+        # DB 테이블 생성 시도 (이미 생성되어 있다면 통과)
+        create_tables()
+        print("데이터베이스 초기화 완료")
+    except Exception as e:
+        print(f"DB 초기화 중 경고/에러 발생 (Vercel 환경 체크 필요): {e}")
+
+    # Vercel 읽기 전용 파일 시스템 대응 (임시 폴더 /tmp 사용 또는 실패 무시)
+    try:
+        if not os.path.exists(settings.UPLOAD_DIR):
+            os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    except Exception as e:
+        print(f"업로드 디렉토리 생성 스킵 (Serverless Read-Only Environment): {e}")
     
     yield
     
@@ -35,7 +43,7 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS if hasattr(settings, 'CORS_ORIGINS') else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,6 +74,5 @@ async def root():
         "redoc": "/redoc"
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=settings.SERVER_HOST, port=settings.SERVER_PORT)
+# ⚠️ Vercel 배포를 위해 uvicorn.run(...) 부분은 완전히 삭제하거나 주석 처리합니다.
+# (Vercel이 app 객체를 직접 인스턴스화하여 서빙합니다)
