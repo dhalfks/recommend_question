@@ -1,7 +1,8 @@
 import math
 import random
 from collections import defaultdict
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from models import DifficultyLevel, Question, UserProgress
 
@@ -15,11 +16,34 @@ DIFFICULTY_LEVEL = {
 
 
 def _latest_attempts(db: Session) -> dict[str, dict[int, UserProgress]]:
-    attempts = db.query(UserProgress).order_by(UserProgress.attempted_at.desc(), UserProgress.id.desc()).all()
+    ranked = db.query(
+        UserProgress,
+        func.row_number().over(
+            partition_by=(UserProgress.user_id, UserProgress.question_id),
+            order_by=(UserProgress.attempted_at.desc(), UserProgress.id.desc()),
+        ).label("latest_rank"),
+    ).subquery()
+    latest_attempt = aliased(UserProgress, ranked)
+    attempts = db.query(latest_attempt).filter(ranked.c.latest_rank == 1).all()
     latest: dict[str, dict[int, UserProgress]] = defaultdict(dict)
     for attempt in attempts:
-        latest[str(attempt.user_id)].setdefault(attempt.question_id, attempt)
+        latest[str(attempt.user_id)][attempt.question_id] = attempt
     return latest
+
+
+def _latest_user_attempts(
+    db: Session, user_id: int
+) -> dict[int, UserProgress]:
+    ranked = db.query(
+        UserProgress,
+        func.row_number().over(
+            partition_by=UserProgress.question_id,
+            order_by=(UserProgress.attempted_at.desc(), UserProgress.id.desc()),
+        ).label("latest_rank"),
+    ).filter(UserProgress.user_id == str(user_id)).subquery()
+    latest_attempt = aliased(UserProgress, ranked)
+    attempts = db.query(latest_attempt).filter(ranked.c.latest_rank == 1).all()
+    return {attempt.question_id: attempt for attempt in attempts}
 
 
 def _rating(attempt: UserProgress) -> float:
@@ -85,7 +109,7 @@ def get_similar_learners_most_missed(
     if not similar_learners:
         return []
 
-    question_query = db.query(Question)
+    question_query = db.query(Question).options(joinedload(Question.subject))
     if subject_id is not None:
         question_query = question_query.filter(Question.subject_id == subject_id)
     question_map = {question.id: question for question in question_query.all()}
@@ -124,6 +148,7 @@ def get_similar_learners_most_missed(
                 "title": question.title,
                 "subject_id": question.subject_id,
                 "subject_name": question.subject.name if question.subject else "",
+                "subject_unit": question.subject_unit or question.title,
                 "difficulty": (
                     question.difficulty.value
                     if hasattr(question.difficulty, "value")
@@ -152,13 +177,10 @@ def get_similar_learners_most_missed_units(
     )
     grouped: dict[tuple[int, str], dict] = {}
     for item in questions:
-        question = db.query(Question).filter(Question.id == item["question_id"]).first()
-        if not question:
-            continue
-        unit = (question.subject_unit or question.title or "미분류").strip()
-        key = (question.subject_id, unit)
+        unit = (item["subject_unit"] or item["title"] or "미분류").strip()
+        key = (item["subject_id"], unit)
         group = grouped.setdefault(key, {
-            "subject_id": question.subject_id,
+            "subject_id": item["subject_id"],
             "subject_name": item["subject_name"],
             "subject_unit": unit,
             "question_count": 0,
@@ -190,13 +212,15 @@ def get_my_latest_wrong_questions(
     count: int = 5,
 ) -> list[dict]:
     """Return questions whose latest attempt by the learner is not correct."""
-    attempts = _latest_attempts(db).get(str(user_id), {})
+    attempts = _latest_user_attempts(db, user_id)
     wrong = [attempt for attempt in attempts.values() if attempt.is_correct != "CORRECT"]
     wrong.sort(key=lambda attempt: (attempt.attempted_at, attempt.id), reverse=True)
     question_ids = [attempt.question_id for attempt in wrong[:count]]
     question_map = {
         question.id: question
-        for question in db.query(Question).filter(Question.id.in_(question_ids)).all()
+        for question in db.query(Question)
+        .options(joinedload(Question.subject))
+        .filter(Question.id.in_(question_ids)).all()
     } if question_ids else {}
     items = []
     for attempt in wrong[:count]:

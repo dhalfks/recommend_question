@@ -134,19 +134,38 @@ export default function StudentDashboard() {
   }, [difficultyStats]);
 
   useEffect(() => {
-    Promise.all([
-      progressAPI.dashboard(),
+    let active = true;
+
+    progressAPI.dashboard()
+      .then((response) => {
+        if (active) setData(response.data);
+      })
+      .catch((error) => console.error('대시보드 조회 실패:', error))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    Promise.allSettled([
       subjectsAPI.getAll(),
       recommendationsAPI.getPeerMissedUnits({ count: 5 }),
       recommendationsAPI.getMyWrong({ count: 5 }),
     ])
-      .then(([dashboardResponse, subjectResponse, peerMissedResponse, myWrongResponse]) => {
-        setData(dashboardResponse.data);
-        setSubjects(subjectResponse.data);
-        setPeerMissedUnits(peerMissedResponse.data.items);
-        setMyWrong(myWrongResponse.data.items);
-      })
-      .finally(() => setLoading(false));
+      .then(([subjectResult, peerMissedResult, myWrongResult]) => {
+        if (!active) return;
+        if (subjectResult.status === 'fulfilled') {
+          setSubjects(subjectResult.value.data);
+        }
+        if (peerMissedResult.status === 'fulfilled') {
+          setPeerMissedUnits(peerMissedResult.value.data.items);
+        }
+        if (myWrongResult.status === 'fulfilled') {
+          setMyWrong(myWrongResult.value.data.items);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
