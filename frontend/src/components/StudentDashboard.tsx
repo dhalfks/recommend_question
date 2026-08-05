@@ -145,23 +145,23 @@ export default function StudentDashboard() {
         if (active) setLoading(false);
       });
 
-    Promise.allSettled([
-      subjectsAPI.getAll(),
-      recommendationsAPI.getPeerMissedUnits({ count: 5 }),
-      recommendationsAPI.getMyWrong({ count: 5 }),
-    ])
-      .then(([subjectResult, peerMissedResult, myWrongResult]) => {
-        if (!active) return;
-        if (subjectResult.status === 'fulfilled') {
-          setSubjects(subjectResult.value.data);
-        }
-        if (peerMissedResult.status === 'fulfilled') {
-          setPeerMissedUnits(peerMissedResult.value.data.items);
-        }
-        if (myWrongResult.status === 'fulfilled') {
-          setMyWrong(myWrongResult.value.data.items);
-        }
-      });
+    subjectsAPI.getAll()
+      .then((response) => {
+        if (active) setSubjects(response.data);
+      })
+      .catch((error) => console.error('과목 조회 실패:', error));
+
+    recommendationsAPI.getPeerMissedUnits({ count: 5 })
+      .then((response) => {
+        if (active) setPeerMissedUnits(response.data.items);
+      })
+      .catch((error) => console.error('유사 학습자 추천 조회 실패:', error));
+
+    recommendationsAPI.getMyWrong({ count: 5 })
+      .then((response) => {
+        if (active) setMyWrong(response.data.items);
+      })
+      .catch((error) => console.error('오답 추천 조회 실패:', error));
 
     return () => {
       active = false;
@@ -309,6 +309,7 @@ export default function StudentDashboard() {
                   <option value="EASY">초급</option>
                   <option value="MEDIUM">중급</option>
                   <option value="HARD">고급</option>
+                  <option value="EXPERT">전문가</option>
                 </select>
               </label>
               <label className="text-sm font-semibold">문항 수
