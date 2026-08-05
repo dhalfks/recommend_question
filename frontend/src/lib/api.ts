@@ -50,7 +50,7 @@ export const authAPI = {
 
 // 과목 API
 export const subjectsAPI = {
-  getAll: () => api.get('/subjects/'),
+  getAll: () => api.get('/subjects'),
   getById: (id: number) => api.get(`/subjects/${id}`),
   create: (data: any) => api.post('/subjects', data),
   update: (id: number, data: any) => api.put(`/subjects/${id}`, data),

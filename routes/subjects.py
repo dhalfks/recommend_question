@@ -7,7 +7,7 @@ from services.auth import get_current_user, require_roles
 router = APIRouter()
 
 # 모든 과목 조회
-@router.get("/", response_model=list[SubjectResponse])
+@router.get("", response_model=list[SubjectResponse])
 async def get_subjects(
     db=Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -28,7 +28,7 @@ async def get_subject(
     return subject
 
 # 과목 생성
-@router.post("/", response_model=SubjectResponse)
+@router.post("", response_model=SubjectResponse)
 async def create_subject(
     subject: SubjectCreate,
     db=Depends(get_db),
