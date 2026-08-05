@@ -13,7 +13,7 @@ from schemas.questions import (
 router = APIRouter()
 
 # 모든 문제 조회
-@router.get("/", response_model=list[QuestionResponse])
+@router.get("", response_model=list[QuestionResponse])
 async def get_questions(
     subject_id: int = Query(None),
     difficulty: str = Query(None),
@@ -75,7 +75,7 @@ async def get_question(
     return question
 
 # 문제 생성
-@router.post("/", response_model=QuestionResponse)
+@router.post("", response_model=QuestionResponse)
 async def create_question(
     question: QuestionCreate,
     background_tasks: BackgroundTasks,
