@@ -1,241 +1,236 @@
-# 문제 은행 시스템 (Question Bank System)
+# 문제 은행 시스템
 
-Excel 기반 및 AI를 활용한 코드 기반 문제 자동 생성 시스템입니다.
-
-## 기술 스택
-
-### Backend
-- **Framework**: FastAPI (Python)
-- **Database**: PostgreSQL (Neon/Supabase)
-- **AI**: Google OpenAI API
-- **File Processing**: openpyxl, pandas
-
-### Frontend
-- **Framework**: Next.js
-- **Deployment**: Vercel
-- **Styling**: Tailwind CSS (권장)
-
-### Database
-- **Primary**: PostgreSQL (Neon/Supabase)
-- **ORM**: SQLAlchemy
+FastAPI, Next.js, PostgreSQL을 사용하는 문제 출제·풀이·학습 분석 시스템입니다. Excel과 코드 파일로 문제를 등록하고, 학생별 풀이 기록을 바탕으로 대시보드와 맞춤 추천을 제공합니다.
 
 ## 주요 기능
 
-### 1. Excel 기반 문제 관리
-- Excel 파일 업로드
-- 자동 파싱 및 데이터베이스 저장
-- 난이도 및 과목별 분류
+- 학생·교수자·관리자 회원가입과 JWT 인증
+- 과목, 소제목, 난이도별 랜덤 문제 출제
+- Excel 일괄 등록 및 직접 문제 출제
+- 코드 파일 기반 AI 문제 생성 및 코드 답안 채점
+- 학생 풀이 기록, 점수, 성취도, 풀이 시간 저장
+- 학생 대시보드와 교수자용 문항·학생 분석
+- 유사 학습자 오답 단원, 개인 오답, 적응형 문제 추천
 
-### 2. 코드 기반 문제 자동 생성
-- 다양한 파일 형식 지원 (.java, .js, .sql, .txt, .md)
-- OpenAI API를 사용한 AI 기반 문제 생성
-- 정답 및 설명 자동 작성
+## 기술 구성
 
-### 3. 문제 출제 기능
-- 난이도별 랜덤 문제 출제
-- 과목별 필터링
-- 다중 문제 동시 출제
-
-### 4. 사용자 풀이 기록
-- 문제 풀이 기록 저장
-- 통계 및 분석
+- Backend: FastAPI, SQLAlchemy, PostgreSQL
+- Frontend: Next.js 14, React 18, TypeScript, Tailwind CSS, Axios
+- Database: Neon PostgreSQL
+- AI: OpenAI API
+- Deployment: Vercel 단일 프로젝트
 
 ## 프로젝트 구조
 
-```
+```text
 question_bank_system/
-├── main.py                      # FastAPI 메인 애플리케이션
-├── models.py                    # SQLAlchemy 데이터베이스 모델
-├── config.py                    # 설정 파일
-├── requirements.txt             # Python 의존성
-├── schema.sql                   # 데이터베이스 스키마
-├── .env.example                 # 환경 변수 템플릿
-├── routes/                      # API 라우트
-│   ├── questions.py            # 문제 관련 엔드포인트
-│   ├── files.py                # 파일 업로드 관련 엔드포인트
-│   └── subjects.py             # 과목 관련 엔드포인트
-├── services/                    # 비즈니스 로직
-│   ├── excel_processor.py       # Excel 파일 처리
-│   ├── file_processor.py        # 일반 파일 처리
-│   ├── question_generator.py    # OpenAI API 통합
-│   └── question_retriever.py    # 문제 검색 및 조회
-├── schemas/                     # Pydantic 데이터 스키마
-│   └── questions.py             # 문제 관련 스키마
-├── uploads/                     # 업로드된 파일 저장 디렉토리
-└── frontend/                    # Next.js 프론트엔드 (별도 폴더)
+├── main.py
+├── config.py
+├── models.py
+├── requirements.txt
+├── vercel.json
+├── schema.sql
+├── routes/
+│   ├── auth.py
+│   ├── files.py
+│   ├── progress.py
+│   ├── questions.py
+│   ├── recommendations.py
+│   └── subjects.py
+├── schemas/
+│   ├── auth.py
+│   ├── progress.py
+│   └── questions.py
+├── services/
+│   ├── auth.py
+│   ├── answer_enrichment.py
+│   ├── excel_processor.py
+│   ├── file_processor.py
+│   ├── question_generator.py
+│   └── recommendation.py
+└── frontend/
+    ├── package.json
+    ├── next.config.js
+    └── src/
+        ├── components/
+        ├── contexts/
+        ├── lib/
+        └── pages/
 ```
 
-## 설치 및 실행
+더 자세한 내용은 [프로젝트 구조 문서](docs/PROJECT_STRUCTURE.md)를 참고하세요.
 
-### Backend 설정
+## 로컬 실행
 
-1. **Python 환경 설정**
-```bash
-cd question_bank_system
-python -m venv venv
+### 1. 백엔드
 
-# Windows
-venv\Scripts\activate
-
-# macOS/Linux
-source venv/bin/activate
-```
-
-2. **의존성 설치**
-```bash
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-3. **환경 변수 설정**
-```bash
-# .env 파일 생성 (Neon/Supabase 자격증명 추가)
-cp .env.example .env
+`.env`에서 최소한 다음 값을 설정합니다.
+
+```env
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+JWT_SECRET_KEY=충분히-긴-무작위-문자열
+OPENAI_API_KEY=sk-...
+UPLOAD_DIR=uploads
+CORS_ORIGINS=["http://localhost:3000"]
 ```
 
-4. **데이터베이스 초기화**
-```bash
-# Neon/Supabase에서 schema.sql 실행
-# 또는 Alembic migration 사용
-```
+서버를 실행합니다.
 
-5. **서버 실행**
-```bash
-python main.py
-# 또는
+```powershell
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-서버는 `http://localhost:8000`에서 실행됩니다.
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
 
-### API 문서
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+### 2. 프런트엔드
 
-### Frontend 설정
-
-1. **Next.js 프로젝트 생성**
-```bash
-npx create-next-app@latest frontend --typescript
-cd frontend
+```powershell
+Set-Location frontend
+npm install
 ```
 
-2. **환경 변수 설정** (.env.local)
-```
+`frontend/.env.local`:
+
+```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api
 ```
 
-3. **필요한 패키지 설치**
-```bash
-npm install axios react-query tailwindcss
-```
-
-4. **개발 서버 실행**
-```bash
+```powershell
 npm run dev
 ```
 
-## API 엔드포인트
+웹 화면은 `http://localhost:3000`에서 확인합니다.
 
-### 과목 관리
-- `GET /api/subjects` - 모든 과목 조회
-- `GET /api/subjects/{id}` - 특정 과목 조회
-- `POST /api/subjects` - 과목 생성
-- `PUT /api/subjects/{id}` - 과목 수정
-- `DELETE /api/subjects/{id}` - 과목 삭제
+## 환경변수
 
-### 문제 관리
-- `GET /api/questions` - 문제 목록 조회
-- `GET /api/questions/{id}` - 특정 문제 조회
-- `POST /api/questions` - 문제 생성
-- `PUT /api/questions/{id}` - 문제 수정
-- `DELETE /api/questions/{id}` - 문제 삭제
-- `POST /api/questions/random/quiz` - 랜덤 문제 출제
-- `GET /api/questions/stats/difficulty` - 난이도별 통계
+| 이름 | 용도 | 배포 권장값 |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL 연결 문자열 | Neon pooled connection string |
+| `JWT_SECRET_KEY` | 로그인 토큰 서명 | 긴 무작위 문자열 |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 토큰 유효시간 | `480` |
+| `ADMIN_SIGNUP_CODE` | 관리자 가입 코드 | 운영 전용 비밀값 |
+| `OPENAI_API_KEY` | AI 문제 생성·채점 | OpenAI API 키 |
+| `OPENAI_MODEL` | 사용할 OpenAI 모델 | 프로젝트 설정값 |
+| `UPLOAD_DIR` | 임시 업로드 위치 | Vercel에서는 `/tmp/uploads` |
+| `CORS_ORIGINS` | 허용할 프런트 출처 | JSON 배열 |
+| `NEXT_PUBLIC_API_URL` | 브라우저의 API 기본 경로 | 통합 Vercel 배포에서는 `/api` |
 
-### 파일 관리
-- `POST /api/files/upload/excel` - Excel 파일 업로드
-- `POST /api/files/upload/code` - 코드 파일 업로드
-- `GET /api/files/list` - 업로드된 파일 목록
-- `DELETE /api/files/{id}` - 파일 삭제
+환경변수와 비밀키가 들어 있는 `.env` 및 `.env.local`은 Git에 커밋하지 않습니다.
 
-## Excel 파일 형식
+## 주요 API
 
-| 열 | 필드 | 설명 | 필수 |
-|----|------|------|------|
-| A | 질문 제목 | 문제의 제목 | ✓ |
-| B | 문제 내용 | 문제의 상세 내용 | ✓ |
-| C | 난이도 | EASY, MEDIUM, HARD, EXPERT | ✓ |
-| D | 정답 | 정답 내용 | |
-| E | 설명 | 정답 설명 | |
-| F | 선택지 | JSON 형식 | |
-| G | 태그 | 쉼표로 구분 | |
+모든 보호 API는 로그인으로 발급받은 Bearer 토큰이 필요합니다.
 
-## OpenAI API 설정
+### 인증
 
-1. **API 키 획득**
-   - [Google AI Studio](https://makersuite.google.com/app/apikey)에서 API 키 생성
-   - `.env` 파일에 `OPENAI_API_KEY` 추가
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `PUT /api/auth/me`
 
-2. **코드 파일 업로드 시 자동 문제 생성**
-   - 지원 형식: .java, .js, .sql, .txt, .md
-   - AI가 자동으로 객관식 문제 5개 생성
-   - 정답 및 설명 포함
+### 과목 및 문제
 
-## 배포
+- `GET /api/subjects`
+- `POST /api/subjects`
+- `GET /api/questions`
+- `POST /api/questions`
+- `GET /api/questions/subject-units`
+- `POST /api/questions/random/quiz`
 
-### Backend (Railway/Render/Heroku)
-```bash
-# Dockerfile 생성 및 배포
+### 풀이 및 분석
+
+- `POST /api/progress/submit`
+- `GET /api/progress/dashboard`
+- `GET /api/progress/question-analytics`
+- `GET /api/progress/student-analytics`
+
+### 추천
+
+- `GET /api/recommendations/quiz`
+- `GET /api/recommendations/peer-missed`
+- `GET /api/recommendations/peer-missed-units`
+- `GET /api/recommendations/my-wrong`
+
+### 파일
+
+- `GET /api/files/template/excel`
+- `POST /api/files/upload/excel`
+- `POST /api/files/upload/code`
+- `GET /api/files/list`
+- `DELETE /api/files/{id}`
+
+전체 요청과 응답 형식은 `/docs`의 Swagger UI에서 확인할 수 있습니다.
+
+## Vercel 배포
+
+현재 저장소는 루트 `vercel.json`을 통해 FastAPI와 Next.js를 한 Vercel 프로젝트에 함께 배포합니다.
+
+1. GitHub 저장소를 Vercel 프로젝트에 연결합니다.
+2. Root Directory는 저장소 루트로 둡니다.
+3. Output Directory override는 사용하지 않습니다.
+4. 다음 환경변수를 Vercel 프로젝트에 설정합니다.
+
+```env
+NEXT_PUBLIC_API_URL=/api
+DATABASE_URL=postgresql://...
+JWT_SECRET_KEY=...
+OPENAI_API_KEY=sk-...
+UPLOAD_DIR=/tmp/uploads
 ```
 
-### Frontend (Vercel)
-```bash
-npx vercel deploy
-```
+5. 새 커밋을 푸시하거나 캐시 없이 Redeploy합니다.
 
-## 환경 변수 설명
-
-| 변수명 | 설명 | 예시 |
-|--------|------|------|
-| DATABASE_URL | PostgreSQL 연결 문자열 | postgresql://user:pass@host/db |
-| OPENAI_API_KEY | Google OpenAI API 키 | your_api_key |
-| SERVER_HOST | 서버 호스트 | 0.0.0.0 |
-| SERVER_PORT | 서버 포트 | 8000 |
-| UPLOAD_DIR | 파일 업로드 디렉토리 | uploads |
-| CORS_ORIGINS | CORS 허용 출처 | ["http://localhost:3000"] |
-
-## 주의사항
-
-- PostgreSQL 데이터베이스가 필요합니다 (Neon 또는 Supabase 권장)
-- OpenAI API 키가 필요합니다 (코드 기반 문제 생성 시)
-- 파일 업로드 크기 제한: 10MB (config.py에서 조정 가능)
-
-## 라이센스
-
-MIT
+상세 절차는 [배포 가이드](docs/DEPLOYMENT.md)를 참고하세요.
 
 ## 문제 해결
 
-### 1. 데이터베이스 연결 오류
-```
-DatabaseError: could not translate host name
-```
-→ DATABASE_URL 확인 및 Neon/Supabase 네트워크 설정 확인
+### 대시보드는 열리지만 일부 카드가 비어 있음
 
-### 2. OpenAI API 오류
+브라우저 개발자 도구의 Network 탭에서 다음 요청을 각각 확인합니다.
+
+```text
+/api/progress/dashboard
+/api/subjects
+/api/recommendations/peer-missed-units
+/api/recommendations/my-wrong
 ```
-AuthError: Invalid API key
+
+`401`은 토큰, `403`은 역할, `500`은 백엔드 또는 DB, 약 10초 후 canceled는 클라이언트 시간 초과를 의미합니다.
+
+### 과목 또는 문제 등록이 리다이렉트됨
+
+목록·등록 경로는 끝 슬래시 없이 호출합니다.
+
+```text
+/api/subjects
+/api/questions
 ```
-→ .env 파일에서 OPENAI_API_KEY 확인
 
-### 3. Excel 파일 인코딩 오류
-→ Excel 파일을 UTF-8로 저장
+### Neon Tables 화면에 일부 행만 보임
 
-## 추가 개선 사항
+Tables 화면은 페이지 단위로 표시합니다. 실제 개수는 SQL Editor에서 확인합니다.
 
-- [ ] 사용자 인증 시스템 (JWT)
-- [ ] 문제 카테고리 자동 분류
-- [ ] 시험 모드 및 타이머
-- [ ] 사용자별 통계 및 분석 대시보드
-- [ ] 문제 난이도 자동 조정 (적응형 학습)
-- [ ] 다국어 지원
+```sql
+SELECT COUNT(*) AS question_count, MIN(id), MAX(id)
+FROM questions;
+```
+
+수동 import 후 새 ID가 충돌하면 시퀀스를 현재 최대 ID에 맞춥니다.
+
+```sql
+SELECT setval(
+    pg_get_serial_sequence('questions', 'id'),
+    COALESCE(MAX(id), 1),
+    MAX(id) IS NOT NULL
+)
+FROM questions;
+```

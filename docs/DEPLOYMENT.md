@@ -1,333 +1,244 @@
-# 문제 은행 시스템 - 설정 및 배포 가이드
+# 통합 Vercel 배포 가이드
 
-## 빠른 시작
+이 프로젝트는 하나의 GitHub 저장소와 하나의 Vercel 프로젝트에서 Next.js 프런트엔드와 FastAPI 백엔드를 함께 배포합니다. 데이터는 Neon PostgreSQL에 저장합니다.
 
-### 1. Backend 설정 (FastAPI)
+## 배포 구조
 
-#### 1.1 Python 환경 설정
-```bash
-# Python 3.10 이상 필요
-python --version
-
-# 가상 환경 생성
-python -m venv venv
-
-# 환경 활성화 (Windows)
-venv\Scripts\activate
-
-# 환경 활성화 (macOS/Linux)
-source venv/bin/activate
+```text
+브라우저
+  ├─ /, /login, /quiz ... → Next.js
+  └─ /api/*, /docs        → FastAPI
+                              ├─ Neon PostgreSQL
+                              └─ OpenAI API
 ```
 
-#### 1.2 의존성 설치
-```bash
-pip install -r requirements.txt
+루트 `vercel.json`이 다음 빌드를 담당합니다.
+
+- `main.py`: `@vercel/python`
+- `frontend/package.json`: `@vercel/next`
+- `/api/*`: FastAPI로 전달
+- 나머지 경로: Next.js로 전달
+
+## 1. 배포 전 확인
+
+### 백엔드
+
+```powershell
+.venv\Scripts\python.exe -m py_compile main.py config.py models.py
+.venv\Scripts\python.exe -c "import main; print(type(main.app).__name__)"
 ```
 
-#### 1.3 환경 변수 설정
-```bash
-# .env 파일 생성
-cp .env.example .env
+로컬 실행:
 
-# .env 파일 편집 (데이터베이스, API 키 등)
-# DATABASE_URL: Neon/Supabase PostgreSQL 연결 문자열
-# OPENAI_API_KEY: Google OpenAI API 키
-```
-
-#### 1.4 데이터베이스 설정
-- **Neon 설정** (권장):
-  1. [Neon Console](https://console.neon.tech/)에 회원가입
-  2. 새 프로젝트 생성
-  3. 연결 문자열 복사
-  4. `.env` 파일에 `DATABASE_URL`로 설정
-
-- **Supabase 설정**:
-  1. [Supabase](https://supabase.com/)에 회원가입
-  2. 새 프로젝트 생성
-  3. Connection String (psycopg2) 복사
-  4. `.env` 파일에 `DATABASE_URL`로 설정
-
-#### 1.5 데이터베이스 스키마 생성
-```bash
-# pgAdmin 또는 psql 클라이언트로 schema.sql 실행
-psql -U your_user -d your_database -f schema.sql
-
-# 또는 Neon/Supabase 웹 에디터에서 schema.sql 내용 복사/실행
-```
-
-#### 1.6 서버 실행
-```bash
-# 방법 1: Python 직접 실행
-python main.py
-
-# 방법 2: Uvicorn 서버
+```powershell
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# 방법 3: 프로덕션 배포
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-**서버 확인**:
-- API: http://localhost:8000
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+### 프런트엔드
 
-### 2. Frontend 설정 (Next.js)
-
-#### 2.1 프로젝트 초기화
-```bash
-cd frontend
-
-# 의존성 설치
+```powershell
+Set-Location frontend
 npm install
-# 또는
-yarn install
-```
-
-#### 2.2 환경 변수 설정
-```bash
-# .env.local 파일 확인/수정
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
-```
-
-#### 2.3 개발 서버 실행
-```bash
-npm run dev
-```
-
-**프론트엔드 확인**:
-- http://localhost:3000
-
-### 3. OpenAI API 설정
-
-#### 3.1 API 키 획득
-1. [Google AI Studio](https://makersuite.google.com/app/apikey) 접속
-2. "Get API key" 클릭
-3. "Create API key in new project" 또는 기존 프로젝트 선택
-4. API 키 복사
-
-#### 3.2 .env 파일에 설정
-```
-OPENAI_API_KEY=your_gemini_api_key_here
-```
-
-#### 3.3 테스트
-```bash
-# 코드 파일 업로드 시 자동으로 OpenAI API가 호출됨
-# /api/files/upload/code 엔드포인트 사용
-```
-
-## API 사용 예제
-
-### 1. 과목 생성
-```bash
-curl -X POST http://localhost:8000/api/subjects \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Python 기초",
-    "description": "Python 프로그래밍 기초"
-  }'
-```
-
-### 2. Excel 파일 업로드
-```bash
-curl -X POST http://localhost:8000/api/files/upload/excel \
-  -F "file=@questions.xlsx" \
-  -F "subject_id=1"
-```
-
-### 3. 코드 파일 업로드 (자동 문제 생성)
-```bash
-curl -X POST http://localhost:8000/api/files/upload/code \
-  -F "file=@sample.java" \
-  -F "subject_id=1" \
-  -F "auto_generate=true"
-```
-
-### 4. 랜덤 문제 출제
-```bash
-curl -X POST http://localhost:8000/api/questions/random/quiz \
-  -H "Content-Type: application/json" \
-  -d '{
-    "subject_id": 1,
-    "difficulty": "MEDIUM",
-    "count": 5
-  }'
-```
-
-## 배포 가이드
-
-### Backend 배포 (Railway/Render/Heroku)
-
-#### Railway 배포
-1. [Railway](https://railway.app/)에 회원가입
-2. GitHub 저장소 연결
-3. `main.py` 파일이 있는 디렉토리 선택
-4. 환경 변수 설정 (DATABASE_URL, OPENAI_API_KEY)
-5. 자동 배포
-
-#### Heroku 배포 (기존)
-```bash
-# Procfile 생성
-echo "web: uvicorn main:app --host 0.0.0.0 --port \$PORT" > Procfile
-
-# Heroku 로그인
-heroku login
-
-# 앱 생성 및 배포
-heroku create your-app-name
-git push heroku main
-```
-
-### Frontend 배포 (Vercel)
-
-#### Vercel 배포 (권장)
-1. [Vercel](https://vercel.com/)에 회원가입
-2. GitHub 저장소 연결
-3. `frontend` 디렉토리 선택
-4. 환경 변수 설정:
-   ```
-   NEXT_PUBLIC_API_URL=https://your-backend-api.com/api
-   ```
-5. 자동 배포
-
-#### Next.js 빌드 및 실행
-```bash
-# 프로덕션 빌드
+npx tsc --noEmit
 npm run build
-
-# 프로덕션 서버 실행
-npm start
 ```
 
-## 시스템 아키텍처
+## 2. Neon 준비
 
-```
-┌─────────────────────────────────────────────────────┐
-│                Frontend (Next.js)                    │
-│              Hosted on Vercel                        │
-│  (http://yourapp.vercel.app)                         │
-└────────────────┬────────────────────────────────────┘
-                 │
-                 │ HTTP/REST API
-                 │
-┌────────────────▼────────────────────────────────────┐
-│             Backend (FastAPI)                        │
-│         Hosted on Railway/Render                     │
-│   (https://your-backend-api.railway.app)             │
-├──────────────────────────────────────────────────────┤
-│  • File Upload & Processing                         │
-│  • OpenAI API Integration                           │
-│  • Question Management                              │
-│  • Random Question Generation                       │
-└────────────────┬────────────────────────────────────┘
-                 │
-        ┌────────┴────────┐
-        │                 │
-┌───────▼────────┐  ┌─────▼──────────┐
-│  PostgreSQL    │  │  OpenAI API    │
-│  (Neon/Supabase)  │  (AI Questions)  │
-└────────────────┘  └────────────────┘
-```
-
-## 주요 파일 설명
-
-### Backend
-- `main.py`: FastAPI 메인 애플리케이션
-- `models.py`: SQLAlchemy 데이터베이스 모델
-- `config.py`: 애플리케이션 설정
-- `routes/`: API 엔드포인트
-  - `questions.py`: 문제 관련 API
-  - `files.py`: 파일 업로드 API
-  - `subjects.py`: 과목 관리 API
-- `services/`: 비즈니스 로직
-  - `excel_processor.py`: Excel 파일 처리
-  - `question_generator.py`: OpenAI API 통합
-  - `file_processor.py`: 일반 파일 처리
-- `schema.sql`: 데이터베이스 스키마
-
-### Frontend
-- `src/pages/`: 페이지 컴포넌트
-  - `index.tsx`: 메인 페이지
-  - `upload.tsx`: 파일 업로드 페이지
-  - `quiz.tsx`: 문제 풀이 페이지
-- `src/lib/`: 유틸리티
-  - `api.ts`: API 클라이언트
-- `tailwind.config.js`: Tailwind CSS 설정
-- `.env.local`: 환경 변수
-
-## 환경 변수 참고값
+Neon에서 프로젝트와 데이터베이스를 만든 후 pooled connection string을 준비합니다.
 
 ```env
-# 데이터베이스
-DATABASE_URL=postgresql://user:password@host:5432/database
-
-# OpenAI API
-OPENAI_API_KEY=AIzaSyB...
-
-# 서버 설정
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8000
-
-# 파일 업로드
-UPLOAD_DIR=uploads
-MAX_FILE_SIZE=10485760
-
-# CORS
-CORS_ORIGINS=["http://localhost:3000", "https://yourapp.vercel.app"]
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 ```
 
-## 문제 해결
+SQL Editor에서 기본 상태를 확인합니다.
 
-### 1. 데이터베이스 연결 오류
-**증상**: `could not translate host name`
-**해결**:
-- Neon/Supabase 연결 문자열 확인
-- 방화벽 설정 확인
-- 데이터베이스 사용자명/비밀번호 확인
+```sql
+SELECT current_database(), current_user;
 
-### 2. OpenAI API 오류
-**증상**: `Invalid API key`
-**해결**:
-- API 키 확인
-- API 활성화 확인
-- 배포 환경에서 환경 변수 설정 확인
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+```
 
-### 3. CORS 오류
-**증상**: `Access-Control-Allow-Origin` 오류
-**해결**:
-- `config.py`의 `CORS_ORIGINS` 확인
-- 프론트엔드 URL 추가
+주요 테이블:
 
-### 4. Excel 파일 인코딩 오류
-**증상**: 한글 문자 깨짐
-**해결**:
-- Excel 파일을 UTF-8로 저장
+```text
+users
+subjects
+questions
+excel_questions
+code_files
+user_progress
+quiz_sessions
+```
 
-### 5. 파일 업로드 오류
-**증상**: `413 Payload Too Large`
-**해결**:
-- `config.py`의 `MAX_FILE_SIZE` 증가
-- 파일 크기 확인
+## 3. Vercel 프로젝트 생성
 
-## 참고 자료
+1. Vercel에서 GitHub 저장소를 Import합니다.
+2. Root Directory는 비워 두어 저장소 루트를 사용합니다.
+3. 루트 `vercel.json`이 빌드를 제어하므로 프런트만 가리키는 `frontend` Root Directory를 사용하지 않습니다.
+4. Output Directory override는 끕니다.
+5. 배포 브랜치를 `main`으로 설정합니다.
 
-- [FastAPI 공식 문서](https://fastapi.tiangolo.com/)
-- [Next.js 공식 문서](https://nextjs.org/docs)
-- [SQLAlchemy 공식 문서](https://docs.sqlalchemy.org/)
-- [Google OpenAI API](https://ai.google.dev/)
-- [Neon PostgreSQL](https://neon.tech/)
-- [Supabase](https://supabase.com/)
-- [Vercel](https://vercel.com/)
-- [Railway](https://railway.app/)
+정상 빌드는 Python 함수와 Next.js 출력물을 모두 생성해야 합니다. 수십 밀리초 만에 `no files were prepared`로 끝나면 빈 배포이므로 Root Directory와 `vercel.json` 인식을 다시 확인합니다.
 
-## 추가 기능 (향후 개발)
+## 4. Vercel 환경변수
 
-- [ ] 사용자 인증 (JWT)
-- [ ] 사용자별 학습 통계
-- [ ] 문제 난이도 자동 조정
-- [ ] 시험 모드
-- [ ] 팀 협업 기능
-- [ ] 모바일 앱
-- [ ] 다국어 지원
-- [ ] 문제 기여 커뮤니티
+같은 Vercel 프로젝트에 프런트와 백엔드 변수를 모두 설정합니다.
+
+```env
+NEXT_PUBLIC_API_URL=/api
+DATABASE_URL=postgresql://...
+JWT_SECRET_KEY=충분히-긴-무작위-문자열
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=480
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.6-sol
+UPLOAD_DIR=/tmp/uploads
+CORS_ORIGINS=["https://실제도메인.vercel.app"]
+```
+
+선택 항목:
+
+```env
+ADMIN_SIGNUP_CODE=관리자-가입-코드
+MAX_FILE_SIZE=10485760
+```
+
+주의사항:
+
+- 키 이름은 `OPEN_API_KEY`가 아니라 `OPENAI_API_KEY`입니다.
+- `NEXT_PUBLIC_API_URL`은 빌드 시 번들에 반영되므로 변경 후 재배포해야 합니다.
+- 통합 배포에서는 `/api`를 사용합니다.
+- Vercel 서버리스 파일 시스템은 영구 저장소가 아니며 쓰기 작업은 `/tmp`만 사용합니다.
+- `.env` 파일을 Git에 커밋하지 않습니다.
+
+## 5. 배포 및 확인
+
+```powershell
+git status
+git add <변경한 파일>
+git commit -m "describe deployment change"
+git push origin main
+```
+
+Vercel 배포가 끝나면 다음을 확인합니다.
+
+```text
+https://도메인.vercel.app/
+https://도메인.vercel.app/docs
+https://도메인.vercel.app/openapi.json
+```
+
+`/docs`에서 다음 순서로 API를 검증합니다.
+
+1. `POST /api/auth/login`
+2. 응답의 `access_token` 복사
+3. Swagger의 Authorize에 토큰 입력
+4. `GET /api/auth/me`
+5. `GET /api/subjects`
+6. `GET /api/progress/dashboard`
+7. `GET /api/recommendations/peer-missed-units`
+
+## 6. 브라우저 검증
+
+개발자 도구의 Network 탭에서 요청 URL, 최종 Status, Response를 확인합니다.
+
+| 상태 | 의미 | 확인할 부분 |
+|---|---|---|
+| `200` | 정상 | 응답 데이터 구조 |
+| `307`, `308` | 리다이렉트 | trailing slash, 도메인 정규화 |
+| `401` | 인증 실패 | access token |
+| `403` | 권한 실패 | 사용자 role |
+| `404` | 라우팅 실패 | `vercel.json`, API 경로 |
+| `422` | 입력 검증 실패 | 요청 JSON |
+| `500` | 서버 오류 | Vercel Runtime Logs, DB 스키마 |
+| `canceled` 약 10초 | Axios 시간 초과 | 느린 DB·추천 쿼리 |
+
+과목과 문제 목록·등록 API는 끝 슬래시 없이 사용합니다.
+
+```text
+GET  /api/subjects
+POST /api/subjects
+GET  /api/questions
+POST /api/questions
+```
+
+## 7. 데이터베이스 점검
+
+### 문제 개수
+
+```sql
+SELECT COUNT(*) AS question_count, MIN(id), MAX(id)
+FROM questions;
+```
+
+Neon Tables 화면은 일부 페이지만 보여줄 수 있으므로 전체 개수는 SQL 결과를 기준으로 판단합니다.
+
+### 시퀀스
+
+수동으로 ID를 지정해 import한 뒤 등록이 실패하면 확인합니다.
+
+```sql
+SELECT last_value, is_called
+FROM questions_id_seq;
+```
+
+복구:
+
+```sql
+SELECT setval(
+    pg_get_serial_sequence('questions', 'id'),
+    COALESCE(MAX(id), 1),
+    MAX(id) IS NOT NULL
+)
+FROM questions;
+```
+
+### 풀이 기록 연결
+
+```sql
+SELECT
+    u.id,
+    u.email,
+    u.role,
+    COUNT(up.id) AS attempts
+FROM users u
+LEFT JOIN user_progress up ON up.user_id = u.id::text
+GROUP BY u.id, u.email, u.role
+ORDER BY u.id;
+```
+
+현재 `user_progress.user_id`는 문자열이고 `users.id`는 정수입니다. 애플리케이션은 문자열 변환으로 연결합니다. 타입과 코드를 함께 마이그레이션하지 않은 상태에서 외래키만 추가하면 안 됩니다.
+
+## 8. 대시보드 및 추천 문제 해결
+
+학생 메인 화면은 다음 요청을 사용합니다.
+
+```text
+/api/progress/dashboard
+/api/subjects
+/api/recommendations/peer-missed-units
+/api/recommendations/my-wrong
+```
+
+기본 대시보드와 부가 추천 요청은 독립적으로 처리됩니다. 추천 API가 실패하더라도 풀이 현황과 과목 목록은 표시되어야 합니다.
+
+`peer-missed-units`가 느리면 다음을 확인합니다.
+
+- 사용자·문제별 최신 풀이만 조회하는지
+- 문제별 반복 조회가 없는지
+- `user_progress.user_id`, `question_id` 인덱스가 있는지
+- Neon과 Vercel Runtime Logs의 쿼리 시간을 확인했는지
+
+## 9. 재배포
+
+환경변수나 빌드 설정을 변경한 경우 Vercel Deployments에서 캐시 없이 Redeploy합니다. 코드 변경은 `main` 브랜치에 푸시하면 자동 배포됩니다.
+
+배포 후 이전 JavaScript가 남아 있으면 브라우저에서 강력 새로고침합니다.
+
+```text
+Windows: Ctrl + Shift + R
+macOS: Command + Shift + R
+```
