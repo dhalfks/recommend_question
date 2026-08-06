@@ -9,9 +9,9 @@ type Item = { question_id: number; question_number: number; title: string; conte
 type Summary = { questions: number; responses: number; correct_rate: number; average_seconds: number; highest_wrong: Item | null; slowest: Item | null };
 type Student = { id: number | string; name: string; answer: string | null; elapsed_seconds: number };
 type Detail = { question: { id: number; number: number; title: string; content: string; explanation?: string; correct_option: number | null }; options: Array<{ index: number; text: string; count: number }>; students: Record<'correct' | 'incorrect' | 'skipped', Student[]> };
-type StudentSummary = { id: number; name: string; email: string; attempted: number; correct: number; score_percent: number; achievement_score: number; average_seconds: number; last_attempted: string | null };
+type StudentSummary = { id: number; name: string; email: string; affiliation?: string | null; academic_year?: number | null; course_name?: string | null; attempted: number; correct: number; score_percent: number; achievement_score: number; average_seconds: number; last_attempted: string | null };
 type StudentGroup = { subject_id: number; subject_name: string; difficulty: string; attempted: number; correct: number; score_percent: number; achievement_score: number; average_seconds: number };
-type StudentDetail = { student: { id: number; name: string; email: string }; total_attempted: number; total_correct: number; score_percent: number; achievement_score: number; average_seconds: number; total_sessions: number; groups: StudentGroup[] };
+type StudentDetail = { student: { id: number; name: string; email: string; affiliation?: string | null; academic_year?: number | null; course_name?: string | null }; total_attempted: number; total_correct: number; score_percent: number; achievement_score: number; average_seconds: number; total_sessions: number; groups: StudentGroup[] };
 
 const difficultyLabels: Record<string, string> = { EASY: '초급', MEDIUM: '중급', HARD: '고급', EXPERT: '전문가' };
 const difficultyColors: Record<string, string> = { EASY: '#3B86D1', MEDIUM: '#21BF06', HARD: '#F59E0B', EXPERT: '#8B5CF6' };
@@ -130,6 +130,9 @@ function StudentDetailPanel({ detail }: { detail: StudentDetail }) {
   }, [difficultyStats, detail.total_attempted]);
 
   return <div className="mt-7">
+    <section className="mb-5 rounded-xl bg-[#F8F9FA] p-4 text-sm text-[#5E6872]">
+      {[detail.student.affiliation, detail.student.academic_year ? `${detail.student.academic_year}년` : null, detail.student.course_name].filter(Boolean).join(' · ') || '소속 정보 없음'}
+    </section>
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Metric label="풀이 문항" value={`${detail.total_attempted}`} color="#3B86D1" note={`정답 ${detail.total_correct}개`} />
       <Metric label="정답률" value={`${detail.score_percent}%`} color="#21A608" note="전체 풀이 기준" />

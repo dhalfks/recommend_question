@@ -25,6 +25,17 @@ export type AuthUser = {
   phone: string;
   email: string;
   role: UserRole;
+  affiliation?: string | null;
+  academic_year?: number | null;
+  course_name?: string | null;
+  professor_id?: number | null;
+};
+
+export type ProfessorOption = {
+  id: number;
+  name: string;
+  affiliation?: string | null;
+  course_name?: string | null;
 };
 
 export const authAPI = {
@@ -34,8 +45,13 @@ export const authAPI = {
     email: string;
     password: string;
     role: UserRole;
+    affiliation?: string;
+    academic_year?: number;
+    course_name?: string;
+    professor_id?: number;
     admin_signup_code?: string;
   }) => api.post('/auth/register', data),
+  professors: () => api.get<ProfessorOption[]>('/auth/professors'),
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
@@ -45,6 +61,9 @@ export const authAPI = {
     email?: string;
     current_password?: string;
     new_password?: string;
+    affiliation?: string;
+    academic_year?: number;
+    course_name?: string;
   }) => api.put('/auth/me', data),
 };
 

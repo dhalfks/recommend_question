@@ -5,6 +5,7 @@ from config import settings
 from models import User, UserRole, get_db
 from schemas.auth import (
     LoginRequest,
+    ProfessorResponse,
     RegisterRequest,
     TokenResponse,
     UserResponse,
@@ -20,6 +21,26 @@ from services.auth import (
 router = APIRouter()
 
 
+def get_professor(db: Session, professor_id: int | None) -> User | None:
+    if professor_id is None:
+        return None
+    return (
+        db.query(User)
+        .filter(User.id == professor_id, User.role == UserRole.PROFESSOR)
+        .first()
+    )
+
+
+@router.get("/professors", response_model=list[ProfessorResponse])
+async def professors(db: Session = Depends(get_db)):
+    return (
+        db.query(User)
+        .filter(User.role == UserRole.PROFESSOR)
+        .order_by(User.name, User.id)
+        .all()
+    )
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     email = payload.email.lower().strip()
@@ -30,6 +51,8 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         or payload.admin_signup_code != settings.ADMIN_SIGNUP_CODE
     ):
         raise HTTPException(status_code=403, detail="admin 가입 코드가 올바르지 않습니다.")
+    if payload.role == UserRole.STUDENT and not get_professor(db, payload.professor_id):
+        raise HTTPException(status_code=400, detail="선택한 교수자 계정을 찾을 수 없습니다.")
 
     user = User(
         name=payload.name.strip(),
@@ -37,6 +60,10 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         email=email,
         password_hash=hash_password(payload.password),
         role=payload.role,
+        affiliation=payload.affiliation.strip() if payload.affiliation else None,
+        academic_year=payload.academic_year,
+        course_name=payload.course_name.strip() if payload.course_name else None,
+        professor_id=payload.professor_id if payload.role == UserRole.STUDENT else None,
     )
     db.add(user)
     db.commit()
@@ -79,6 +106,12 @@ async def update_me(
     if payload.phone is not None:
         current_user.phone = payload.phone.strip()
 
+    if payload.affiliation is not None:
+        current_user.affiliation = payload.affiliation.strip() or None
+    if payload.academic_year is not None:
+        current_user.academic_year = payload.academic_year
+    if payload.course_name is not None:
+        current_user.course_name = payload.course_name.strip() or None
     if payload.new_password is not None:
         if not payload.current_password or not verify_password(
             payload.current_password, current_user.password_hash

@@ -66,7 +66,7 @@ def _boolean(value, field_name, *, default=False):
     raise ValueError(f"{field_name}은(는) TRUE 또는 FALSE여야 합니다")
 
 
-def _full_question(row, subject_id, source_file):
+def _full_question(row, subject_id, source_file, professor_id):
     external_id = _integer(row["id"], "id", minimum=1)
     correct_option = _integer(row["correct_option"], "correct_option", minimum=1, maximum=4)
     benchmark_time = _integer(row["benchmark_time"], "benchmark_time", minimum=1)
@@ -75,6 +75,7 @@ def _full_question(row, subject_id, source_file):
 
     return Question(
         subject_id=subject_id,
+        professor_id=professor_id,
         question_type=QuestionType.EXCEL,
         title=subject_unit,
         content=_text(row["content"], required=True),
@@ -94,9 +95,10 @@ def _full_question(row, subject_id, source_file):
     )
 
 
-def _legacy_question(row, subject_id, source_file):
+def _legacy_question(row, subject_id, source_file, professor_id):
     return Question(
         subject_id=subject_id,
+        professor_id=professor_id,
         question_type=QuestionType.EXCEL,
         title=_text(row["title"], required=True),
         content=_text(row["content"], required=True),
@@ -109,7 +111,9 @@ def _legacy_question(row, subject_id, source_file):
     )
 
 
-async def process_excel_file(file_path: str, subject_id: int, db: Session) -> dict:
+async def process_excel_file(
+    file_path: str, subject_id: int, professor_id: int | None, db: Session
+) -> dict:
     """14컬럼 표준 Excel 또는 기존 7컬럼 Excel을 문제 테이블에 등록한다."""
     try:
         workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
@@ -140,7 +144,7 @@ async def process_excel_file(file_path: str, subject_id: int, db: Session) -> di
                 continue
             row = dict(zip(headers, values))
             try:
-                question = question_factory(row, subject_id, source_file)
+                question = question_factory(row, subject_id, source_file, professor_id)
                 if question.external_id is not None:
                     if question.external_id in seen_external_ids:
                         raise ValueError(f"id {question.external_id}가 파일 안에서 중복되었습니다")

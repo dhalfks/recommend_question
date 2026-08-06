@@ -42,7 +42,17 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(512), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)
+    affiliation = Column(String(255), nullable=True)
+    academic_year = Column(Integer, nullable=True)
+    course_name = Column(String(255), nullable=True)
+    professor_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    professor = relationship(
+        "User", remote_side=[id], foreign_keys=[professor_id], backref="students"
+    )
 
 # 데이터베이스 모델
 class Subject(Base):
@@ -61,6 +71,9 @@ class Question(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
+    professor_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     question_type = Column(Enum(QuestionType), nullable=False)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
@@ -83,6 +96,7 @@ class Question(Base):
     
     # 관계
     subject = relationship("Subject", back_populates="questions")
+    professor = relationship("User", foreign_keys=[professor_id])
 
 class ExcelQuestion(Base):
     __tablename__ = "excel_questions"
@@ -102,10 +116,14 @@ class CodeFile(Base):
     file_type = Column(String(20), nullable=False)  # java, js, sql, txt, md
     file_content = Column(Text, nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    professor_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     
     # 관계
     subject = relationship("Subject")
+    professor = relationship("User", foreign_keys=[professor_id])
 
 class UserProgress(Base):
     __tablename__ = "user_progress"

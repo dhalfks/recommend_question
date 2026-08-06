@@ -4,7 +4,7 @@ from collections import defaultdict
 from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased, joinedload
 
-from models import DifficultyLevel, Question, UserProgress
+from models import DifficultyLevel, Question, User, UserProgress
 
 
 DIFFICULTY_LEVEL = {
@@ -15,14 +15,25 @@ DIFFICULTY_LEVEL = {
 }
 
 
-def _latest_attempts(db: Session) -> dict[str, dict[int, UserProgress]]:
-    ranked = db.query(
+def _latest_attempts(
+    db: Session, professor_id: int | None = None
+) -> dict[str, dict[int, UserProgress]]:
+    query = db.query(
         UserProgress,
         func.row_number().over(
             partition_by=(UserProgress.user_id, UserProgress.question_id),
             order_by=(UserProgress.attempted_at.desc(), UserProgress.id.desc()),
         ).label("latest_rank"),
-    ).subquery()
+    )
+    if professor_id is not None:
+        student_ids = [
+            str(row[0])
+            for row in db.query(User.id).filter(User.professor_id == professor_id).all()
+        ]
+        if not student_ids:
+            return {}
+        query = query.filter(UserProgress.user_id.in_(student_ids))
+    ranked = query.subquery()
     latest_attempt = aliased(UserProgress, ranked)
     attempts = db.query(latest_attempt).filter(ranked.c.latest_rank == 1).all()
     latest: dict[str, dict[int, UserProgress]] = defaultdict(dict)
@@ -85,6 +96,7 @@ def get_similar_learners_most_missed(
     user_id: int,
     count: int = 5,
     subject_id: int | None = None,
+    professor_id: int | None = None,
 ) -> list[dict]:
     """Return questions most often missed by learners similar to ``user_id``.
 
@@ -93,7 +105,7 @@ def get_similar_learners_most_missed(
     similar learner, while the raw miss count and miss rate are included for
     a dashboard-friendly explanation.
     """
-    all_latest = _latest_attempts(db)
+    all_latest = _latest_attempts(db, professor_id)
     user_attempts = all_latest.get(str(user_id), {})
 
     similar_learners: list[tuple[float, dict[int, UserProgress]]] = []
@@ -112,6 +124,8 @@ def get_similar_learners_most_missed(
     question_query = db.query(Question).options(joinedload(Question.subject))
     if subject_id is not None:
         question_query = question_query.filter(Question.subject_id == subject_id)
+    if professor_id is not None:
+        question_query = question_query.filter(Question.professor_id == professor_id)
     question_map = {question.id: question for question in question_query.all()}
 
     stats: dict[int, dict[str, float | int]] = defaultdict(
@@ -170,10 +184,11 @@ def get_similar_learners_most_missed_units(
     user_id: int,
     count: int = 5,
     subject_id: int | None = None,
+    professor_id: int | None = None,
 ) -> list[dict]:
     """Group similar learners' most-missed questions by subject unit."""
     questions = get_similar_learners_most_missed(
-        db, user_id, count=1000, subject_id=subject_id
+        db, user_id, count=1000, subject_id=subject_id, professor_id=professor_id
     )
     grouped: dict[tuple[int, str], dict] = {}
     for item in questions:
@@ -210,6 +225,7 @@ def get_my_latest_wrong_questions(
     db: Session,
     user_id: int,
     count: int = 5,
+    professor_id: int | None = None,
 ) -> list[dict]:
     """Return questions whose latest attempt by the learner is not correct."""
     attempts = _latest_user_attempts(db, user_id)
@@ -220,7 +236,10 @@ def get_my_latest_wrong_questions(
         question.id: question
         for question in db.query(Question)
         .options(joinedload(Question.subject))
-        .filter(Question.id.in_(question_ids)).all()
+        .filter(
+            Question.id.in_(question_ids),
+            Question.professor_id == professor_id,
+        ).all()
     } if question_ids else {}
     items = []
     for attempt in wrong[:count]:
@@ -245,13 +264,16 @@ def recommend_questions(
     user_id: int,
     count: int = 5,
     subject_id: int | None = None,
+    professor_id: int | None = None,
 ) -> tuple[list[Question], list[dict]]:
     """Hybrid user-CF + item similarity + adaptive-difficulty recommender."""
-    all_latest = _latest_attempts(db)
+    all_latest = _latest_attempts(db, professor_id)
     user_attempts = all_latest.get(str(user_id), {})
     questions = db.query(Question)
     if subject_id:
         questions = questions.filter(Question.subject_id == subject_id)
+    if professor_id is not None:
+        questions = questions.filter(Question.professor_id == professor_id)
     candidates = questions.all()
     if not candidates:
         return [], []
@@ -271,7 +293,12 @@ def recommend_questions(
         question_id for question_id, attempt in user_attempts.items()
         if attempt.is_correct != "CORRECT"
     }
-    question_map = {question.id: question for question in db.query(Question).all()}
+    question_map_query = db.query(Question)
+    if professor_id is not None:
+        question_map_query = question_map_query.filter(
+            Question.professor_id == professor_id
+        )
+    question_map = {question.id: question for question in question_map_query.all()}
     weak_subjects: dict[int, float] = defaultdict(float)
     weak_tags: dict[str, float] = defaultdict(float)
     for question_id in wrong_questions:
