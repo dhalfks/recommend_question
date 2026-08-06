@@ -5,6 +5,7 @@ import random
 
 from models import get_db, Question, Subject, User, UserRole
 from services.auth import get_current_user, require_roles
+from services.permissions import ensure_question_access, scope_questions
 from schemas.questions import (
     QuestionCreate, QuestionResponse, RandomQuestionsRequest, 
     RandomQuestionsResponse, QuestionUpdate
@@ -22,7 +23,7 @@ async def get_questions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Question)
+    query = scope_questions(db.query(Question), current_user)
     
     if subject_id:
         query = query.filter(Question.subject_id == subject_id)
@@ -50,7 +51,7 @@ async def get_subject_units(
     current_user: User = Depends(get_current_user),
 ):
     units = (
-        db.query(Question.subject_unit)
+        scope_questions(db.query(Question.subject_unit), current_user)
         .filter(
             Question.subject_id == subject_id,
             Question.subject_unit.isnot(None),
@@ -70,9 +71,7 @@ async def get_question(
     current_user: User = Depends(get_current_user),
 ):
     question = db.query(Question).filter(Question.id == question_id).first()
-    if not question:
-        raise HTTPException(status_code=404, detail="Question not found")
-    return question
+    return ensure_question_access(question, current_user)
 
 # 문제 생성
 @router.post("", response_model=QuestionResponse)
@@ -91,6 +90,9 @@ async def create_question(
     
     db_question = Question(
         subject_id=question.subject_id,
+        professor_id=(
+            current_user.id if current_user.role == UserRole.PROFESSOR else None
+        ),
         question_type="EXCEL",
         title=question.title,
         content=question.content,
@@ -123,9 +125,14 @@ async def update_question(
         require_roles(UserRole.PROFESSOR, UserRole.ADMIN)
     ),
 ):
-    db_question = db.query(Question).filter(Question.id == question_id).first()
-    if not db_question:
-        raise HTTPException(status_code=404, detail="Question not found")
+    db_question = ensure_question_access(
+        db.query(Question).filter(Question.id == question_id).first(), current_user
+    )
+
+    if question_update.subject_id is not None:
+        subject = db.query(Subject).filter(Subject.id == question_update.subject_id).first()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
     
     update_data = question_update.dict(exclude_unset=True)
     for key, value in update_data.items():
@@ -144,9 +151,9 @@ async def delete_question(
         require_roles(UserRole.PROFESSOR, UserRole.ADMIN)
     ),
 ):
-    db_question = db.query(Question).filter(Question.id == question_id).first()
-    if not db_question:
-        raise HTTPException(status_code=404, detail="Question not found")
+    db_question = ensure_question_access(
+        db.query(Question).filter(Question.id == question_id).first(), current_user
+    )
     
     db.delete(db_question)
     db.commit()
@@ -159,7 +166,7 @@ async def get_random_questions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Question)
+    query = scope_questions(db.query(Question), current_user)
     
     if request.subject_id:
         query = query.filter(Question.subject_id == request.subject_id)
@@ -198,10 +205,10 @@ async def get_difficulty_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(
+    query = scope_questions(db.query(
         Question.difficulty,
         func.count(Question.id).label("count")
-    )
+    ), current_user)
     
     if subject_id:
         query = query.filter(Question.subject_id == subject_id)

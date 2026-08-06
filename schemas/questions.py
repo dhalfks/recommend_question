@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
@@ -48,6 +48,7 @@ class QuestionCreate(BaseModel):
     is_required: bool = False
 
 class QuestionUpdate(BaseModel):
+    subject_id: Optional[int] = None
     title: Optional[str] = None
     content: Optional[str] = None
     correct_answer: Optional[str] = None
@@ -57,11 +58,14 @@ class QuestionUpdate(BaseModel):
     tags: Optional[str] = None
     code_snippet: Optional[str] = None
     answer_code_snippet: Optional[str] = None
+    subject_unit: Optional[str] = None
+    correct_option: Optional[int] = Field(default=None, ge=1, le=4)
     is_required: Optional[bool] = None
 
 class QuestionResponse(BaseModel):
     id: int
     subject_id: int
+    professor_id: Optional[int] = None
     question_type: QuestionTypeEnum
     title: str
     content: str

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from models import get_db, Subject, User, UserRole
+from models import get_db, Question, Subject, User, UserRole
 from schemas.questions import SubjectCreate, SubjectResponse, SubjectUpdate
 from services.auth import get_current_user, require_roles
 
@@ -12,7 +12,16 @@ async def get_subjects(
     db=Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    subjects = db.query(Subject).all()
+    query = db.query(Subject)
+    if current_user.role == UserRole.STUDENT:
+        if current_user.professor_id is None:
+            return []
+        query = (
+            query.join(Question, Question.subject_id == Subject.id)
+            .filter(Question.professor_id == current_user.professor_id)
+            .distinct()
+        )
+    subjects = query.order_by(Subject.name).all()
     return subjects
 
 # 특정 과목 조회

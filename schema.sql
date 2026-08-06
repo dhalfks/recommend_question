@@ -6,6 +6,14 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(512) NOT NULL,
     role VARCHAR(20) NOT NULL,
+    affiliation VARCHAR(255),
+    academic_year INTEGER,
+    course_name VARCHAR(255),
+    professor_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT users_student_professor_check CHECK (
+        (role = 'STUDENT' AND professor_id IS NOT NULL)
+        OR (role <> 'STUDENT' AND professor_id IS NULL)
+    ),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -20,6 +28,7 @@ CREATE TABLE subjects (
 CREATE TABLE questions (
     id SERIAL PRIMARY KEY,
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    professor_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     question_type VARCHAR(20) NOT NULL,  -- EXCEL, CODE
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
@@ -58,6 +67,7 @@ CREATE TABLE code_files (
     file_type VARCHAR(20) NOT NULL,  -- java, js, sql, txt, md
     file_content TEXT NOT NULL,
     subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+    professor_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -88,10 +98,14 @@ CREATE TABLE quiz_sessions (
 
 -- 인덱스
 CREATE INDEX idx_questions_subject_id ON questions(subject_id);
+CREATE INDEX idx_users_professor_id ON users(professor_id);
+CREATE INDEX idx_questions_professor_id ON questions(professor_id);
+CREATE INDEX idx_questions_professor_subject ON questions(professor_id, subject_id);
 CREATE INDEX idx_questions_difficulty ON questions(difficulty);
 CREATE INDEX idx_questions_created_at ON questions(created_at);
 CREATE INDEX idx_questions_external_id ON questions(external_id);
 CREATE INDEX idx_questions_subject_code ON questions(subject_code);
 CREATE INDEX idx_code_files_subject_id ON code_files(subject_id);
+CREATE INDEX idx_code_files_professor_id ON code_files(professor_id);
 CREATE INDEX idx_user_progress_user_id ON user_progress(user_id);
 CREATE INDEX idx_user_progress_question_id ON user_progress(question_id);

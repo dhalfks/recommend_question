@@ -23,6 +23,7 @@ export default function Navbar() {
             <>
               <Link href="/analytics" className="rounded-lg px-3 py-2 hover:bg-white/10">문항 분석</Link>
               <Link href="/create-question" className="rounded-lg px-3 py-2 hover:bg-white/10">문제 출제</Link>
+              <Link href="/manage-questions" className="rounded-lg px-3 py-2 hover:bg-white/10">문제 관리</Link>
               <Link href="/upload" className="rounded-lg px-3 py-2 hover:bg-white/10">파일 등록</Link>
             </>
           )}

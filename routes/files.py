@@ -53,7 +53,8 @@ async def upload_excel(
         file_path = await save_upload_file(file, settings.UPLOAD_DIR)
         
         # Excel 파일 처리
-        result = await process_excel_file(file_path, subject_id, db)
+        professor_id = current_user.id if current_user.role == UserRole.PROFESSOR else None
+        result = await process_excel_file(file_path, subject_id, professor_id, db)
         if not result["success"]:
             detail = result["message"]
             if result.get("errors"):
@@ -119,7 +120,10 @@ async def upload_code_file(
             file_path=file_path,
             file_type=file_ext[1:],  # 확장자에서 점 제거
             file_content=file_content,
-            subject_id=subject_id
+            subject_id=subject_id,
+            professor_id=(
+                current_user.id if current_user.role == UserRole.PROFESSOR else None
+            ),
         )
         db.add(code_file)
         db.commit()
@@ -133,7 +137,8 @@ async def upload_code_file(
                 file.filename,
                 subject_id,
                 file_ext[1:],
-                db
+                db,
+                current_user.id if current_user.role == UserRole.PROFESSOR else None,
             )
             if not result["success"]:
                 raise HTTPException(status_code=502, detail=result["message"])
@@ -174,6 +179,8 @@ async def list_uploaded_files(
     업로드된 코드 파일 목록 조회
     """
     query = db.query(CodeFile)
+    if current_user.role == UserRole.PROFESSOR:
+        query = query.filter(CodeFile.professor_id == current_user.id)
     
     if subject_id:
         query = query.filter(CodeFile.subject_id == subject_id)
@@ -205,6 +212,11 @@ async def delete_file(
     """
     code_file = db.query(CodeFile).filter(CodeFile.id == file_id).first()
     if not code_file:
+        raise HTTPException(status_code=404, detail="File not found")
+    if (
+        current_user.role == UserRole.PROFESSOR
+        and code_file.professor_id != current_user.id
+    ):
         raise HTTPException(status_code=404, detail="File not found")
     
     # 실제 파일 삭제

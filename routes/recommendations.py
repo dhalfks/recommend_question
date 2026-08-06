@@ -21,7 +21,8 @@ async def similar_learners_most_missed(
     current_user: User = Depends(require_roles(UserRole.STUDENT)),
 ):
     items = get_similar_learners_most_missed(
-        db, current_user.id, count=count, subject_id=subject_id
+        db, current_user.id, count=count, subject_id=subject_id,
+        professor_id=current_user.professor_id,
     )
     return {"items": items, "total_count": len(items)}
 
@@ -33,7 +34,9 @@ async def adaptive_quiz(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.STUDENT)),
 ):
-    questions, metadata = recommend_questions(db, current_user.id, count, subject_id)
+    questions, metadata = recommend_questions(
+        db, current_user.id, count, subject_id, current_user.professor_id
+    )
     if not questions:
         raise HTTPException(status_code=404, detail="추천할 문항이 없습니다.")
     return {
@@ -52,7 +55,8 @@ async def similar_learners_most_missed_units(
     current_user: User = Depends(require_roles(UserRole.STUDENT)),
 ):
     items = get_similar_learners_most_missed_units(
-        db, current_user.id, count=count, subject_id=subject_id
+        db, current_user.id, count=count, subject_id=subject_id,
+        professor_id=current_user.professor_id,
     )
     return {"items": items, "total_count": len(items)}
 
@@ -63,5 +67,7 @@ async def my_latest_wrong_questions(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.STUDENT)),
 ):
-    items = get_my_latest_wrong_questions(db, current_user.id, count=count)
+    items = get_my_latest_wrong_questions(
+        db, current_user.id, count=count, professor_id=current_user.professor_id
+    )
     return {"items": items, "total_count": len(items)}

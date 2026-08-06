@@ -43,6 +43,7 @@ async def generate_questions_from_code(
     subject_id: int,
     file_type: str,
     db: Session,
+    professor_id: int | None = None,
 ) -> dict:
     """Analyze an uploaded text/code file and persist validated quiz questions."""
     if not client:
@@ -80,6 +81,7 @@ async def generate_questions_from_code(
                 continue
             question = Question(
                 subject_id=subject_id,
+                professor_id=professor_id,
                 question_type=QuestionType.CODE,
                 title=data.title.strip(),
                 content=data.content.strip(),
@@ -112,9 +114,13 @@ async def generate_questions_from_code(
         return {"success": False, "count": 0, "questions": [], "message": f"OpenAI 문제 생성 실패: {error}"}
 
 
-async def generate_single_question(prompt: str, subject_id: int, db: Session) -> dict:
+async def generate_single_question(
+    prompt: str, subject_id: int, db: Session, professor_id: int | None = None
+) -> dict:
     """Compatibility wrapper used by the manual question generation endpoint."""
-    result = await generate_questions_from_code(prompt, "직접 입력", subject_id, "txt", db)
+    result = await generate_questions_from_code(
+        prompt, "직접 입력", subject_id, "txt", db, professor_id
+    )
     if result["success"] and result["questions"]:
         return {"success": True, "question_id": result["questions"][0]["id"], "message": "문제를 생성했습니다."}
     return {"success": False, "message": result["message"]}

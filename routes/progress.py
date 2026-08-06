@@ -16,6 +16,7 @@ from models import (
 )
 from schemas.progress import QuizSubmission, QuizSubmissionResult
 from services.auth import require_roles
+from services.permissions import ensure_question_access, scope_questions
 
 router = APIRouter()
 
@@ -61,6 +62,8 @@ async def get_question_analytics(
         .join(Subject, Question.subject_id == Subject.id)
         .outerjoin(UserProgress, UserProgress.question_id == Question.id)
     )
+    if current_user.role == UserRole.PROFESSOR:
+        query = query.filter(Question.professor_id == current_user.id)
     if subject_id:
         query = query.filter(Question.subject_id == subject_id)
     if difficulty:
@@ -165,9 +168,9 @@ async def get_question_analytics_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMIN)),
 ):
-    question = db.query(Question).filter(Question.id == question_id).first()
-    if not question:
-        raise HTTPException(status_code=404, detail="문항을 찾을 수 없습니다.")
+    question = ensure_question_access(
+        db.query(Question).filter(Question.id == question_id).first(), current_user
+    )
     attempts = (
         db.query(UserProgress, User)
         .outerjoin(User, func.cast(User.id, String) == UserProgress.user_id)
@@ -286,7 +289,9 @@ async def submit_quiz(
     question_ids = list({answer.question_id for answer in payload.answers})
     questions = {
         question.id: question
-        for question in db.query(Question).filter(Question.id.in_(question_ids)).all()
+        for question in scope_questions(
+            db.query(Question).filter(Question.id.in_(question_ids)), current_user
+        ).all()
     }
     if len(questions) != len(question_ids):
         raise HTTPException(status_code=404, detail="존재하지 않는 문제가 포함되어 있습니다.")
@@ -367,6 +372,9 @@ async def get_student_analytics(
             User.id,
             User.name,
             User.email,
+            User.affiliation,
+            User.academic_year,
+            User.course_name,
             func.count(UserProgress.id).label("attempted"),
             correct_sum.label("correct"),
             func.avg(UserProgress.achievement_score).label("achievement_score"),
@@ -375,7 +383,10 @@ async def get_student_analytics(
         )
         .outerjoin(UserProgress, UserProgress.user_id == func.cast(User.id, String))
         .filter(User.role == UserRole.STUDENT)
-        .group_by(User.id, User.name, User.email)
+        .group_by(
+            User.id, User.name, User.email, User.affiliation,
+            User.academic_year, User.course_name
+        )
         .order_by(
             func.count(UserProgress.id).desc(),
             func.avg(UserProgress.achievement_score).desc(),
@@ -383,7 +394,12 @@ async def get_student_analytics(
             User.id,
         )
     )
-    total = db.query(func.count(User.id)).filter(User.role == UserRole.STUDENT).scalar() or 0
+    if current_user.role == UserRole.PROFESSOR:
+        base = base.filter(User.professor_id == current_user.id)
+    total_query = db.query(func.count(User.id)).filter(User.role == UserRole.STUDENT)
+    if current_user.role == UserRole.PROFESSOR:
+        total_query = total_query.filter(User.professor_id == current_user.id)
+    total = total_query.scalar() or 0
     rows = base.offset((page - 1) * page_size).limit(page_size).all()
     items = []
     for row in rows:
@@ -393,6 +409,9 @@ async def get_student_analytics(
             "id": row.id,
             "name": row.name,
             "email": row.email,
+            "affiliation": row.affiliation,
+            "academic_year": row.academic_year,
+            "course_name": row.course_name,
             "attempted": attempted,
             "correct": correct,
             "score_percent": round(correct / attempted * 100) if attempted else 0,
@@ -409,12 +428,17 @@ async def get_student_analytics_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMIN)),
 ):
-    student = db.query(User).filter(User.id == student_id, User.role == UserRole.STUDENT).first()
+    student_query = db.query(User).filter(
+        User.id == student_id, User.role == UserRole.STUDENT
+    )
+    if current_user.role == UserRole.PROFESSOR:
+        student_query = student_query.filter(User.professor_id == current_user.id)
+    student = student_query.first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
     correct_sum = func.sum(case((UserProgress.is_correct == "CORRECT", 1), else_=0))
-    rows = (
+    detail_query = (
         db.query(
             Subject.id.label("subject_id"),
             Subject.name.label("subject_name"),
@@ -429,8 +453,10 @@ async def get_student_analytics_detail(
         .filter(UserProgress.user_id == str(student_id))
         .group_by(Subject.id, Subject.name, Question.difficulty)
         .order_by(Subject.name, Question.difficulty)
-        .all()
     )
+    if current_user.role == UserRole.PROFESSOR:
+        detail_query = detail_query.filter(Question.professor_id == current_user.id)
+    rows = detail_query.all()
     groups = [{
         "subject_id": row.subject_id,
         "subject_name": row.subject_name,
@@ -447,7 +473,14 @@ async def get_student_analytics_detail(
     weighted_seconds = sum(group["average_seconds"] * group["attempted"] for group in groups)
     session_count = db.query(func.count(QuizSession.id)).filter(QuizSession.user_id == student_id).scalar() or 0
     return {
-        "student": {"id": student.id, "name": student.name, "email": student.email},
+        "student": {
+            "id": student.id,
+            "name": student.name,
+            "email": student.email,
+            "affiliation": student.affiliation,
+            "academic_year": student.academic_year,
+            "course_name": student.course_name,
+        },
         "total_attempted": total_attempted,
         "total_correct": total_correct,
         "score_percent": round(total_correct / total_attempted * 100) if total_attempted else 0,
@@ -479,6 +512,7 @@ async def get_dashboard(
         .join(Question, UserProgress.question_id == Question.id)
         .join(Subject, Question.subject_id == Subject.id)
         .filter(UserProgress.user_id == str(current_user.id))
+        .filter(Question.professor_id == current_user.professor_id)
         .group_by(Subject.id, Subject.name, Question.difficulty)
         .order_by(Subject.name, Question.difficulty)
         .all()

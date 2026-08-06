@@ -1,26 +1,39 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/contexts/AuthContext';
-import { authAPI, UserRole } from '@/lib/api';
+import { authAPI, ProfessorOption, UserRole } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setSession } = useAuth();
   const [form, setForm] = useState({
     name: '', phone: '', email: '', password: '', role: 'STUDENT' as UserRole,
+    affiliation: '', academic_year: String(new Date().getFullYear()),
+    course_name: '', professor_id: '',
   });
+  const [professors, setProfessors] = useState<ProfessorOption[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    authAPI.professors()
+      .then(({ data }) => setProfessors(data))
+      .catch(() => setError('교수자 목록을 불러오지 못했습니다.'));
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const { data } = await authAPI.register(form);
+      const { data } = await authAPI.register({
+        ...form,
+        academic_year: form.role === 'STUDENT' ? Number(form.academic_year) : undefined,
+        professor_id: form.role === 'STUDENT' ? Number(form.professor_id) : undefined,
+      });
       setSession(data.access_token, data.user);
       await router.replace(data.user.role === 'STUDENT' ? '/' : '/create-question');
     } catch (requestError: any) {
@@ -50,6 +63,35 @@ export default function RegisterPage() {
                 </button>
               ))}
             </div>
+            <label className="block text-sm font-semibold">소속
+              <input required value={form.affiliation}
+                onChange={(e) => update('affiliation', e.target.value)}
+                className="form-control mt-2" placeholder="예: 컴퓨터공학과" />
+            </label>
+            <label className="block text-sm font-semibold">과정명
+              <input required value={form.course_name}
+                onChange={(e) => update('course_name', e.target.value)}
+                className="form-control mt-2" placeholder="예: 웹 개발 과정" />
+            </label>
+            {form.role === 'STUDENT' && <>
+              <label className="block text-sm font-semibold">연도
+                <input required type="number" min={2000} max={2100} value={form.academic_year}
+                  onChange={(e) => update('academic_year', e.target.value)}
+                  className="form-control mt-2" />
+              </label>
+              <label className="block text-sm font-semibold">담당 교수자
+                <select required value={form.professor_id}
+                  onChange={(e) => update('professor_id', e.target.value)}
+                  className="form-control mt-2">
+                  <option value="">교수자 선택</option>
+                  {professors.map((professor) => (
+                    <option key={professor.id} value={professor.id}>
+                      {professor.name}{professor.affiliation ? ` · ${professor.affiliation}` : ''}{professor.course_name ? ` · ${professor.course_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>}
             <label className="block text-sm font-semibold">이름
               <input required minLength={2} value={form.name} onChange={(e) => update('name', e.target.value)}
                 className="form-control mt-2" autoComplete="name" />
