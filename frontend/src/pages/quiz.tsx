@@ -15,6 +15,7 @@ type QuizQuestion = {
   content: string;
   difficulty: string;
   question_type: string;
+  answer_type: 'MULTIPLE_CHOICE' | 'SUBJECTIVE' | 'CODE_INPUT';
   options?: string | string[] | null;
   correct_answer?: string | null;
   correct_option?: number | null;
@@ -184,6 +185,7 @@ export default function QuizPage() {
     () => questions.reduce((total, question) => {
       const options = getOptions(question);
       const correct = gradingResults[question.id]?.is_correct ?? (
+        question.answer_type === 'CODE_INPUT' ? false :
         options.length > 0
           ? selectedAnswers[question.id] === getCorrectIndex(question)
           : isSubjectiveCorrect(question, writtenAnswers[question.id])
@@ -324,7 +326,9 @@ export default function QuizPage() {
                         <div className="rounded-xl bg-[#F8F9FA] p-4">
                           <p className="text-sm font-semibold text-[#6C757D]">내가 선택한 답</p>
                           <p className="mt-1 font-semibold">
-                            {reviewOptions.length === 0
+                            {reviewQuestion.answer_type === 'CODE_INPUT'
+                              ? 'GPT가 문제 요구사항을 기준으로 채점'
+                              : reviewOptions.length === 0
                               ? reviewWritten.trim() || '답하지 않음'
                               : reviewSelected !== undefined && reviewOptions[reviewSelected]
                                 ? `${reviewSelected + 1}번 ${reviewOptions[reviewSelected]}`
@@ -458,7 +462,7 @@ export default function QuizPage() {
                           [question.id]: event.target.value,
                         }))}
                         className="form-control font-mono text-sm"
-                        placeholder="텍스트 정답이나 코드 정답을 입력하세요."
+                        placeholder={question.answer_type === 'CODE_INPUT' ? '채점할 코드를 입력하세요.' : '주관식 정답을 입력하세요.'}
                         spellCheck={false}
                       />
                     </label>

@@ -99,7 +99,7 @@ export const progressAPI = {
       sequence_number: number;
       elapsed_seconds: number;
     }>;
-  }) => api.post('/progress/submit', data),
+  }) => api.post('/progress/submit', data, { timeout: 120000 }),
   dashboard: () => api.get('/progress/dashboard'),
   questionAnalytics: (params?: Record<string, string | number>) =>
     api.get('/progress/question-analytics', { params }),

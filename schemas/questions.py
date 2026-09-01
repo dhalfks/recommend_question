@@ -14,6 +14,11 @@ class QuestionTypeEnum(str, Enum):
     EXCEL = "EXCEL"
     CODE = "CODE"
 
+class AnswerTypeEnum(str, Enum):
+    MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
+    SUBJECTIVE = "SUBJECTIVE"
+    CODE_INPUT = "CODE_INPUT"
+
 # Subject 스키마
 class SubjectCreate(BaseModel):
     name: str
@@ -37,6 +42,7 @@ class QuestionCreate(BaseModel):
     subject_id: int
     title: str
     content: str
+    answer_type: AnswerTypeEnum = AnswerTypeEnum.MULTIPLE_CHOICE
     correct_answer: Optional[str] = None
     explanation: Optional[str] = None
     difficulty: DifficultyEnum
@@ -51,6 +57,7 @@ class QuestionUpdate(BaseModel):
     subject_id: Optional[int] = None
     title: Optional[str] = None
     content: Optional[str] = None
+    answer_type: Optional[AnswerTypeEnum] = None
     correct_answer: Optional[str] = None
     explanation: Optional[str] = None
     difficulty: Optional[DifficultyEnum] = None
@@ -67,6 +74,7 @@ class QuestionResponse(BaseModel):
     subject_id: int
     professor_id: Optional[int] = None
     question_type: QuestionTypeEnum
+    answer_type: AnswerTypeEnum
     title: str
     content: str
     correct_answer: Optional[str]
@@ -93,7 +101,7 @@ class RandomQuestionsRequest(BaseModel):
     subject_id: Optional[int] = None
     subject_unit: Optional[str] = None
     difficulty: Optional[DifficultyEnum] = None
-    count: int = 5
+    count: int = Field(default=5, ge=1, le=100)
 
 class RandomQuestionsResponse(BaseModel):
     questions: List[QuestionResponse]

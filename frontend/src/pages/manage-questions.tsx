@@ -9,6 +9,7 @@ type Subject = { id: number; name: string };
 type Question = {
   id: number; subject_id: number; title: string; content: string;
   difficulty: string; options?: string | null; correct_answer?: string | null;
+  answer_type: 'MULTIPLE_CHOICE' | 'SUBJECTIVE' | 'CODE_INPUT';
   correct_option?: number | null; explanation?: string | null; subject_unit?: string | null;
   code_snippet?: string | null; answer_code_snippet?: string | null; is_required: boolean;
 };
@@ -90,6 +91,7 @@ export default function ManageQuestionsPage() {
     setForm({
       subject_id: String(question.subject_id), title: question.title, content: question.content,
       subject_unit: question.subject_unit ?? '', difficulty: question.difficulty,
+      answer_type: question.answer_type,
       options: parseOptions(question.options), correct_answer: String(Math.max(0, Math.min(3, answerIndex))),
       explanation: question.explanation ?? '', code_snippet: question.code_snippet ?? '',
       answer_code_snippet: question.answer_code_snippet ?? '', is_required: question.is_required,
@@ -100,7 +102,7 @@ export default function ManageQuestionsPage() {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!editing || !form) return;
-    const hasOptions = form.options.some((option: string) => option.trim());
+    const hasOptions = form.answer_type === 'MULTIPLE_CHOICE';
     if (hasOptions && form.options.some((option: string) => !option.trim())) {
       setNotice('객관식 문제는 선택지 4개를 모두 입력해 주세요.'); return;
     }
@@ -110,8 +112,9 @@ export default function ManageQuestionsPage() {
       const { data } = await questionsAPI.update(editing.id, {
         subject_id: Number(form.subject_id), title: form.title, content: form.content,
         subject_unit: form.subject_unit || null, difficulty: form.difficulty,
+        answer_type: form.answer_type,
         options: hasOptions ? JSON.stringify(form.options) : null,
-        correct_answer: hasOptions ? String(answerIndex) : null,
+        correct_answer: form.answer_type === 'SUBJECTIVE' ? form.correct_answer : hasOptions ? String(answerIndex) : null,
         correct_option: hasOptions ? answerIndex + 1 : null,
         explanation: form.explanation || null, code_snippet: form.code_snippet || null,
         answer_code_snippet: form.answer_code_snippet || null, is_required: form.is_required,

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import random
 
-from models import get_db, Question, Subject, User, UserRole
+from models import AnswerType, get_db, Question, Subject, User, UserRole
 from services.auth import get_current_user, require_roles
 from services.permissions import ensure_question_access, scope_questions
 from schemas.questions import (
@@ -88,30 +88,32 @@ async def create_question(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
+    is_code_input = question.answer_type == AnswerType.CODE_INPUT
     db_question = Question(
         subject_id=question.subject_id,
         professor_id=(
             current_user.id if current_user.role == UserRole.PROFESSOR else None
         ),
         question_type="EXCEL",
+        answer_type=question.answer_type,
         title=question.title,
         content=question.content,
-        correct_answer=question.correct_answer,
+        correct_answer=None if is_code_input else question.correct_answer,
         explanation=question.explanation,
         difficulty=question.difficulty,
         source_file=question.source_file,
-        options=question.options,
+        options=None if is_code_input else question.options,
         tags=question.tags,
         code_snippet=question.code_snippet,
-        answer_code_snippet=question.answer_code_snippet,
+        answer_code_snippet=None if is_code_input else question.answer_code_snippet,
         is_required=question.is_required,
     )
     db.add(db_question)
     db.commit()
     db.refresh(db_question)
-    from services.answer_enrichment import enrich_question_by_id
-
-    background_tasks.add_task(enrich_question_by_id, db_question.id)
+    if not is_code_input:
+        from services.answer_enrichment import enrich_question_by_id
+        background_tasks.add_task(enrich_question_by_id, db_question.id)
     return db_question
 
 
@@ -135,6 +137,9 @@ async def update_question(
             raise HTTPException(status_code=404, detail="Subject not found")
     
     update_data = question_update.dict(exclude_unset=True)
+    target_answer_type = update_data.get("answer_type", db_question.answer_type)
+    if target_answer_type == AnswerType.CODE_INPUT:
+        update_data.update(correct_answer=None, correct_option=None, options=None, answer_code_snippet=None)
     for key, value in update_data.items():
         setattr(db_question, key, value)
     
@@ -181,9 +186,12 @@ async def get_random_questions(
         raise HTTPException(status_code=404, detail="No questions found matching criteria")
     
     # 랜덤 선택
-    questions = query.all()
+    # PK 기준으로 한 번 더 중복을 제거해 조인/쿼리 변경 시에도 같은 문제가
+    # 한 퀴즈에 두 번 포함되지 않도록 보장한다.
+    questions = list({question.id: question for question in query.all()}.values())
     required_questions = [question for question in questions if question.is_required]
     regular_questions = [question for question in questions if not question.is_required]
+    # 요청 수보다 후보가 적으면 가능한 문항만 반환한다.
     target_count = min(request.count, len(questions))
     selected_questions = random.sample(
         required_questions, min(target_count, len(required_questions))

@@ -9,6 +9,7 @@ type Tab = 'manual' | 'excel';
 
 const initialForm = {
   subject_id: '', title: '', content: '', difficulty: 'MEDIUM',
+  answer_type: 'MULTIPLE_CHOICE',
   options: ['', '', '', ''], correct_answer: '0', explanation: '',
   code_snippet: '', answer_code_snippet: '', is_required: false,
 };
@@ -43,16 +44,16 @@ export default function CreateQuestionPage() {
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setLoading(true); setMessage('');
     try {
-      const hasOptions = form.options.some((option) => option.trim());
+      const hasOptions = form.answer_type === 'MULTIPLE_CHOICE';
       if (hasOptions && form.options.some((option) => !option.trim())) {
         setMessage('객관식 문제는 선택지 4개를 모두 입력해 주세요.'); return;
       }
       await questionsAPI.create({
         ...form, subject_id: Number(form.subject_id),
         options: hasOptions ? JSON.stringify(form.options) : null,
-        correct_answer: hasOptions ? form.correct_answer : null,
+        correct_answer: form.answer_type === 'CODE_INPUT' ? null : form.correct_answer,
         code_snippet: form.code_snippet || null,
-        answer_code_snippet: form.answer_code_snippet || null,
+        answer_code_snippet: null,
       });
       setForm({ ...initialForm, subject_id: form.subject_id });
       setMessage('문제가 성공적으로 등록되었습니다.');
@@ -97,13 +98,15 @@ export default function CreateQuestionPage() {
           <label className="text-sm font-semibold">과목<select required value={form.subject_id} onChange={(e) => setForm({ ...form, subject_id: e.target.value })} className="form-control mt-2"><option value="">과목 선택</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
           <label className="text-sm font-semibold">난이도<select value={form.difficulty} onChange={(e) => setForm({ ...form, difficulty: e.target.value })} className="form-control mt-2"><option value="EASY">초급</option><option value="MEDIUM">중급</option><option value="HARD">고급</option><option value="EXPERT">전문가</option></select></label>
         </div>
+        <label className="block text-sm font-semibold">문제 유형<select value={form.answer_type} onChange={(e) => setForm({ ...form, answer_type: e.target.value })} className="form-control mt-2"><option value="MULTIPLE_CHOICE">객관식</option><option value="SUBJECTIVE">주관식</option><option value="CODE_INPUT">코드 입력</option></select></label>
         <label className="flex items-start gap-3 rounded-xl border border-[#F4C76A] bg-[#FFF9E8] p-4"><input type="checkbox" checked={form.is_required} onChange={(e) => setForm({ ...form, is_required: e.target.checked })} className="mt-1 h-4 w-4" /><span><strong className="block text-sm text-[#8A5A00]">필수 문제</strong><span className="mt-1 block text-xs text-[#7A6843]">랜덤 출제 시 일반 문제보다 먼저 포함됩니다.</span></span></label>
         <label className="block text-sm font-semibold">제목<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="form-control mt-2" /></label>
         <label className="block text-sm font-semibold">문제 내용<textarea required rows={4} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="form-control mt-2" /></label>
         <label className="block text-sm font-semibold">문제 소스 코드<textarea rows={8} value={form.code_snippet} onChange={(e) => setForm({ ...form, code_snippet: e.target.value })} className="form-control mt-2 font-mono text-sm" placeholder="필요한 경우 입력하세요." spellCheck={false} /></label>
-        <fieldset><legend className="mb-3 text-sm font-semibold">선택지와 정답</legend><div className="space-y-3">{form.options.map((option, index) => <label key={index} className="flex items-center gap-3"><input type="radio" name="correct" checked={form.correct_answer === String(index)} onChange={() => setForm({ ...form, correct_answer: String(index) })} /><input value={option} onChange={(e) => updateOption(index, e.target.value)} className="form-control" placeholder={`${index + 1}번 선택지`} /></label>)}</div></fieldset>
+        {form.answer_type === 'MULTIPLE_CHOICE' && <fieldset><legend className="mb-3 text-sm font-semibold">선택지와 정답</legend><div className="space-y-3">{form.options.map((option, index) => <label key={index} className="flex items-center gap-3"><input type="radio" name="correct" checked={form.correct_answer === String(index)} onChange={() => setForm({ ...form, correct_answer: String(index) })} /><input value={option} onChange={(e) => updateOption(index, e.target.value)} className="form-control" placeholder={`${index + 1}번 선택지`} /></label>)}</div></fieldset>}
+        {form.answer_type === 'SUBJECTIVE' && <label className="block text-sm font-semibold">정답<input required value={form.correct_answer} onChange={(e) => setForm({ ...form, correct_answer: e.target.value })} className="form-control mt-2" /></label>}
+        {form.answer_type === 'CODE_INPUT' && <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-[#245E96]">코드 입력 문제는 정답을 DB에 저장하지 않습니다. 제출 코드는 GPT가 문제 요구사항을 기준으로 채점하고 리팩토링 제안을 해설로 제공합니다.</p>}
         <label className="block text-sm font-semibold">해설<textarea rows={4} value={form.explanation} onChange={(e) => setForm({ ...form, explanation: e.target.value })} className="form-control mt-2" /></label>
-        <label className="block text-sm font-semibold">정답 소스 코드<textarea rows={8} value={form.answer_code_snippet} onChange={(e) => setForm({ ...form, answer_code_snippet: e.target.value })} className="form-control mt-2 font-mono text-sm" placeholder="모범 답안 코드를 입력할 수 있습니다." spellCheck={false} /></label>
         {message && <p className="rounded-lg bg-blue-50 p-3 text-sm text-[#2F70B5]">{message}</p>}
         <button disabled={loading} className="primary-button w-full">{loading ? '등록 중...' : '문제 등록'}</button>
       </form> : <section className="surface-card mt-6 p-8">

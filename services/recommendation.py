@@ -274,7 +274,8 @@ def recommend_questions(
         questions = questions.filter(Question.subject_id == subject_id)
     if professor_id is not None:
         questions = questions.filter(Question.professor_id == professor_id)
-    candidates = questions.all()
+    # 추천 퀴즈도 문제 ID별 한 번만 후보에 포함한다.
+    candidates = list({question.id: question for question in questions.all()}.values())
     if not candidates:
         return [], []
 

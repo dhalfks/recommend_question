@@ -28,6 +28,11 @@ class QuestionType(str, enum.Enum):
     EXCEL = "EXCEL"
     CODE = "CODE"
 
+class AnswerType(str, enum.Enum):
+    MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
+    SUBJECTIVE = "SUBJECTIVE"
+    CODE_INPUT = "CODE_INPUT"
+
 class UserRole(str, enum.Enum):
     STUDENT = "STUDENT"
     PROFESSOR = "PROFESSOR"
@@ -75,6 +80,7 @@ class Question(Base):
         Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     question_type = Column(Enum(QuestionType), nullable=False)
+    answer_type = Column(Enum(AnswerType), nullable=False, default=AnswerType.MULTIPLE_CHOICE, server_default=AnswerType.MULTIPLE_CHOICE.value)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
     correct_answer = Column(Text, nullable=True)
@@ -162,6 +168,11 @@ def create_tables():
             connection.execute(
                 text("ALTER TABLE questions ADD COLUMN answer_code_snippet TEXT")
             )
+    if "answer_type" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TYPE answertype AS ENUM ('MULTIPLE_CHOICE', 'SUBJECTIVE', 'CODE_INPUT')"))
+            connection.execute(text("ALTER TABLE questions ADD COLUMN answer_type answertype NOT NULL DEFAULT 'MULTIPLE_CHOICE'"))
+            connection.execute(text("UPDATE questions SET answer_type = CASE WHEN options IS NULL OR BTRIM(options) IN ('', '[]') THEN 'SUBJECTIVE'::answertype ELSE 'MULTIPLE_CHOICE'::answertype END"))
     if "is_required" not in columns:
         with engine.begin() as connection:
             connection.execute(

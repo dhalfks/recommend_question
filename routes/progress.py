@@ -5,6 +5,7 @@ from uuid import uuid4
 import json
 
 from models import (
+    AnswerType,
     DifficultyLevel,
     Question,
     QuizSession,
@@ -240,6 +241,14 @@ def has_options(question: Question):
 
 
 async def grade_answer(question: Question, answer):
+    if question.answer_type == AnswerType.CODE_INPUT:
+        submitted = normalized_answer(answer)
+        if not submitted:
+            return False, "제출된 코드가 없습니다."
+        from services.answer_enrichment import grade_code_answer
+        result = await grade_code_answer(question, submitted)
+        return result["is_correct"], result["explanation"]
+
     if has_options(question):
         return answer is not None and answer == correct_index(question), None
 

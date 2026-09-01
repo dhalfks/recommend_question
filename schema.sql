@@ -30,6 +30,7 @@ CREATE TABLE questions (
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     professor_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     question_type VARCHAR(20) NOT NULL,  -- EXCEL, CODE
+    answer_type VARCHAR(30) NOT NULL DEFAULT 'MULTIPLE_CHOICE',
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
     correct_answer TEXT,
