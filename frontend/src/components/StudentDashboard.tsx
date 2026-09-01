@@ -182,10 +182,10 @@ export default function StudentDashboard() {
 
   const startQuiz = (event: React.FormEvent) => {
     event.preventDefault();
-    const query = new URLSearchParams({ count: String(count) });
+    const query = new URLSearchParams({ count: String(quizMode === 'CODE' ? 1 : count) });
     query.set('mode', quizMode);
     if (subjectId) query.set('subjectId', subjectId);
-    if (subjectUnit) query.set('subjectUnit', subjectUnit);
+    if (quizMode === 'STANDARD' && subjectUnit) query.set('subjectUnit', subjectUnit);
     if (difficulty) query.set('difficulty', difficulty);
     router.push(`/quiz?${query.toString()}`);
   };
@@ -293,14 +293,14 @@ export default function StudentDashboard() {
                 <button type="button" onClick={() => { setQuizMode('CODE'); if (difficulty === 'EXPERT') setDifficulty(''); }} className={`flex-1 px-5 py-4 font-bold ${quizMode === 'CODE' ? 'bg-[#F3FBF1] text-[#168A04]' : 'text-[#6C757D]'}`}>코드만 풀기</button>
               </div>
               <div className="px-6 pt-5 text-sm text-[#6C757D]">{quizMode === 'CODE' ? '코딩 테스트처럼 코드 입력 문제만 풀고 GPT 채점과 리팩토링 해설을 받습니다.' : '객관식과 주관식 문제만 무작위로 출제합니다.'}</div>
-            <form onSubmit={startQuiz} className="grid items-end gap-4 p-6 lg:grid-cols-[1fr_1fr_1fr_140px_auto]">
+            <form onSubmit={startQuiz} className={`grid items-end gap-4 p-6 ${quizMode === 'CODE' ? 'md:grid-cols-[1fr_1fr_auto]' : 'lg:grid-cols-[1fr_1fr_1fr_140px_auto]'}`}>
               <label className="text-sm font-semibold">과목
                 <select className="form-control mt-2" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
                   <option value="">전체 과목</option>
                   {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-semibold">소제목
+              {quizMode === 'STANDARD' && <label className="text-sm font-semibold">소제목
                 <select
                   className="form-control mt-2"
                   value={subjectUnit}
@@ -310,7 +310,7 @@ export default function StudentDashboard() {
                   <option value="">{subjectId ? '전체 소제목' : '과목을 먼저 선택하세요'}</option>
                   {subjectUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
                 </select>
-              </label>
+              </label>}
               <label className="text-sm font-semibold">난이도
                 <select className="form-control mt-2" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
                   <option value="">전체 난이도</option>
@@ -320,14 +320,14 @@ export default function StudentDashboard() {
                   {quizMode === 'STANDARD' && <option value="EXPERT">전문가</option>}
                 </select>
               </label>
-              <label className="text-sm font-semibold">문항 수
+              {quizMode === 'STANDARD' && <label className="text-sm font-semibold">문항 수
                 <select className="form-control mt-2" value={count} onChange={(e) => setCount(Number(e.target.value))}>
                   <option value={5}>5문항</option>
                   <option value={10}>10문항</option>
                   <option value={20}>20문항</option>
                 </select>
-              </label>
-              <button className="success-button h-[50px]">{quizMode === 'CODE' ? '코드 문제 시작' : '랜덤 문제'}</button>
+              </label>}
+              <button className="success-button h-[50px]">{quizMode === 'CODE' ? '코드 1문제 시작' : '랜덤 문제'}</button>
             </form>
             </section>
 
