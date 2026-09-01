@@ -4,7 +4,7 @@ from collections import defaultdict
 from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased, joinedload
 
-from models import DifficultyLevel, Question, User, UserProgress
+from models import AnswerType, DifficultyLevel, Question, User, UserProgress
 
 
 DIFFICULTY_LEVEL = {
@@ -269,7 +269,7 @@ def recommend_questions(
     """Hybrid user-CF + item similarity + adaptive-difficulty recommender."""
     all_latest = _latest_attempts(db, professor_id)
     user_attempts = all_latest.get(str(user_id), {})
-    questions = db.query(Question)
+    questions = db.query(Question).filter(Question.answer_type != AnswerType.CODE_INPUT)
     if subject_id:
         questions = questions.filter(Question.subject_id == subject_id)
     if professor_id is not None:

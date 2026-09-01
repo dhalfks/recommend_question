@@ -19,6 +19,10 @@ class AnswerTypeEnum(str, Enum):
     SUBJECTIVE = "SUBJECTIVE"
     CODE_INPUT = "CODE_INPUT"
 
+class QuizModeEnum(str, Enum):
+    STANDARD = "STANDARD"
+    CODE = "CODE"
+
 # Subject 스키마
 class SubjectCreate(BaseModel):
     name: str
@@ -101,6 +105,7 @@ class RandomQuestionsRequest(BaseModel):
     subject_id: Optional[int] = None
     subject_unit: Optional[str] = None
     difficulty: Optional[DifficultyEnum] = None
+    mode: QuizModeEnum = QuizModeEnum.STANDARD
     count: int = Field(default=5, ge=1, le=100)
 
 class RandomQuestionsResponse(BaseModel):

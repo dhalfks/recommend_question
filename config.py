@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # OpenAI API
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-5.6-sol"
+    OPENAI_GRADING_MODEL: str = "gpt-5.6-luna"
+    OPENAI_GRADING_REVIEW_MODEL: str = "gpt-5.6-sol"
+    OPENAI_GRADING_CONFIDENCE_THRESHOLD: float = 0.75
     
     # Server
     SERVER_HOST: str = "0.0.0.0"

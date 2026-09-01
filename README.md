@@ -120,6 +120,9 @@ npm run dev
 | `ADMIN_SIGNUP_CODE` | 관리자 가입 코드 | 운영 전용 비밀값 |
 | `OPENAI_API_KEY` | AI 문제 생성·채점 | OpenAI API 키 |
 | `OPENAI_MODEL` | 사용할 OpenAI 모델 | 프로젝트 설정값 |
+| `OPENAI_GRADING_MODEL` | 코드 1차 저비용 채점 모델 | `gpt-5.6-luna` |
+| `OPENAI_GRADING_REVIEW_MODEL` | 애매한 코드의 2차 정밀 채점 모델 | `gpt-5.6-sol` |
+| `OPENAI_GRADING_CONFIDENCE_THRESHOLD` | 2차 채점으로 전환할 최소 확신도 | `0.75` |
 | `UPLOAD_DIR` | 임시 업로드 위치 | Vercel에서는 `/tmp/uploads` |
 | `CORS_ORIGINS` | 허용할 프런트 출처 | JSON 배열 |
 | `NEXT_PUBLIC_API_URL` | 브라우저의 API 기본 경로 | 통합 Vercel 배포에서는 `/api` |

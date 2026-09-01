@@ -179,6 +179,10 @@ async def get_random_questions(
         query = query.filter(Question.subject_unit == request.subject_unit)
     if request.difficulty:
         query = query.filter(Question.difficulty == request.difficulty)
+    if request.mode.value == "CODE":
+        query = query.filter(Question.answer_type == AnswerType.CODE_INPUT)
+    else:
+        query = query.filter(Question.answer_type != AnswerType.CODE_INPUT)
     
     total_count = query.count()
     

@@ -114,6 +114,7 @@ export default function QuizPage() {
     difficulty?: string,
     count: number = 5,
     adaptive: boolean = false,
+    mode: 'STANDARD' | 'CODE' = 'STANDARD',
   ) => {
     setLoading(true);
     try {
@@ -124,6 +125,7 @@ export default function QuizPage() {
             subject_unit: subjectUnit,
             difficulty,
             count,
+            mode,
           });
       setQuestions(response.data.questions);
       setSelectedAnswers({});
@@ -150,8 +152,9 @@ export default function QuizPage() {
       ? router.query.difficulty
       : undefined;
     const adaptive = router.query.adaptive === '1';
-    fetchRandomQuestions(subjectId, subjectUnit, difficulty, Number(router.query.count) || 5, adaptive);
-  }, [router.isReady, router.query.subjectId, router.query.subjectUnit, router.query.difficulty, router.query.count, router.query.adaptive, fetchRandomQuestions]);
+    const mode = router.query.mode === 'CODE' ? 'CODE' : 'STANDARD';
+    fetchRandomQuestions(subjectId, subjectUnit, difficulty, Number(router.query.count) || 5, adaptive, mode);
+  }, [router.isReady, router.query.subjectId, router.query.subjectUnit, router.query.difficulty, router.query.count, router.query.adaptive, router.query.mode, fetchRandomQuestions]);
 
   useEffect(() => {
     if (!questions.length || submitted) return;

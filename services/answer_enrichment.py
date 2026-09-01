@@ -154,24 +154,65 @@ async def grade_code_answer(question: Question, submitted_code: str) -> dict:
 제출 답안:
 {submitted_code}
 
+판정이 문제 설명의 모호함, 실행 환경 의존성, 테스트가 필요한 동작 때문에 불확실하면
+needs_review를 true로 설정하세요. confidence는 판정 확신도를 0부터 1 사이 숫자로 쓰세요.
+
 JSON만 반환하세요:
-{{"is_correct": true, "explanation": "판정 근거와 리팩토링 제안"}}
+{{"is_correct": true, "confidence": 0.9, "needs_review": false, "explanation": "판정 근거와 리팩토링 제안"}}
 """
-    try:
-        response = await client.responses.create(
-            model=settings.OPENAI_MODEL,
-            input=prompt,
-            tools=[{"type": "code_interpreter", "container": {"type": "auto"}}],
-            reasoning={"effort": "medium"},
-            text={"format": {"type": "json_object"}},
-        )
+
+    async def request_grade(model: str, *, precise: bool) -> dict:
+        review_instruction = "" if not precise else """
+이것은 2차 정밀 채점입니다. 모든 요구사항을 독립적으로 다시 검증하고 최종 판정을 내리세요.
+가능하면 Code Interpreter를 사용해 대표 경계값을 확인하세요.
+"""
+        request = {
+            "model": model,
+            "input": f"{prompt}\n{review_instruction}",
+            "reasoning": {"effort": "medium" if precise else "low"},
+            "text": {"format": {"type": "json_object"}},
+        }
+        if precise:
+            request["tools"] = [
+                {"type": "code_interpreter", "container": {"type": "auto"}}
+            ]
+        response = await client.responses.create(**request)
         result = json.loads(response.output_text)
+        confidence = float(result.get("confidence", 0))
         return {
             "is_correct": bool(result.get("is_correct")),
+            "confidence": max(0.0, min(1.0, confidence)),
+            "needs_review": result.get("needs_review") is True,
             "explanation": str(result.get("explanation") or "").strip(),
         }
+
+    first_result = None
+    try:
+        first_result = await request_grade(
+            settings.OPENAI_GRADING_MODEL, precise=False
+        )
+        threshold = max(0.0, min(1.0, settings.OPENAI_GRADING_CONFIDENCE_THRESHOLD))
+        if (
+            first_result["confidence"] >= threshold
+            and not first_result["needs_review"]
+            and first_result["explanation"]
+        ):
+            return first_result
+    except (TypeError, ValueError, json.JSONDecodeError):
+        first_result = None
     except Exception:
+        first_result = None
+
+    try:
+        return await request_grade(
+            settings.OPENAI_GRADING_REVIEW_MODEL, precise=True
+        )
+    except Exception:
+        if first_result and first_result["explanation"]:
+            return first_result
         return {
             "is_correct": False,
+            "confidence": 0.0,
+            "needs_review": True,
             "explanation": "AI 코드 채점 중 오류가 발생했습니다. 잠시 후 다시 제출해 주세요.",
         }
