@@ -38,6 +38,132 @@ export type ProfessorOption = {
   course_name?: string | null;
 };
 
+export type PublicExam = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicExamRound = {
+  id: number;
+  exam_id: number;
+  exam_year: number;
+  round_identifier: string;
+  display_name?: string | null;
+  held_on?: string | null;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicExamSubject = {
+  id: number;
+  round_id: number;
+  code?: string | null;
+  name: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicExamQuestion = {
+  id: number;
+  subject_id: number;
+  question_number: number;
+  content: string;
+  options?: string[] | null;
+  question_type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER';
+};
+
+export type PublicExamQuestionAdmin = PublicExamQuestion & {
+  source_document_id?: number | null;
+  correct_option?: number | null;
+  correct_answer?: string | null;
+  explanation?: string | null;
+  source_page?: number | null;
+  answer_verification_status: 'MISSING' | 'UNVERIFIED' | 'VERIFIED';
+  publication_status: 'DRAFT' | 'READY' | 'PUBLISHED' | 'ARCHIVED';
+  review_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicExamSourceDocument = {
+  id: number;
+  round_id: number;
+  original_file_name: string;
+  source_url?: string | null;
+  source_organization?: string | null;
+  source_notes?: string | null;
+  sha256?: string | null;
+  uploaded_by: number;
+  uploaded_at: string;
+  question_count: number;
+  verified_count: number;
+  published_count: number;
+};
+
+export type PublicExamSourceDocumentDetail = PublicExamSourceDocument & {
+  questions: PublicExamQuestionAdmin[];
+  extraction_message?: string;
+};
+
+export type PublicExamAttemptAnswer = {
+  question: PublicExamQuestion;
+  sequence_number: number;
+  selected_option?: number | null;
+  written_answer?: string | null;
+  elapsed_seconds: number;
+  answered_at?: string | null;
+};
+
+export type PublicExamAttempt = {
+  id: string;
+  subject_id: number;
+  status: 'IN_PROGRESS' | 'SUBMITTED' | 'ABANDONED';
+  started_at: string;
+  last_activity_at: string;
+  total_questions: number;
+  answers: PublicExamAttemptAnswer[];
+};
+
+export type PublicExamResultItem = {
+  question_id: number;
+  sequence_number: number;
+  question_number: number;
+  content: string;
+  options?: string[] | null;
+  question_type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER';
+  selected_option?: number | null;
+  written_answer?: string | null;
+  correct_option?: number | null;
+  correct_answer?: string | null;
+  explanation?: string | null;
+  elapsed_seconds: number;
+  is_correct: boolean;
+};
+
+export type PublicExamResult = {
+  attempt_id: string;
+  exam_name: string;
+  exam_year: number;
+  round_identifier: string;
+  subject_name: string;
+  status: 'SUBMITTED';
+  started_at: string;
+  submitted_at: string;
+  total_elapsed_seconds: number;
+  total_questions: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  score_percent: number;
+  items: PublicExamResultItem[];
+};
+
 export const authAPI = {
   register: (data: {
     name: string;
@@ -109,6 +235,74 @@ export const progressAPI = {
     api.get('/progress/student-analytics', { params }),
   studentAnalyticsDetail: (studentId: number) =>
     api.get(`/progress/student-analytics/${studentId}`),
+};
+
+export const publicExamsAPI = {
+  getExams: () => api.get<PublicExam[]>('/public-exams'),
+  getRounds: (examId: number) =>
+    api.get<PublicExamRound[]>(`/public-exams/${examId}/rounds`),
+  getSubjects: (roundId: number) =>
+    api.get<PublicExamSubject[]>(`/public-exams/rounds/${roundId}/subjects`),
+  startAttempt: (subjectId: number) =>
+    api.post<PublicExamAttempt>(`/public-exams/subjects/${subjectId}/attempts`),
+  getInProgressAttempts: (subjectId?: number) =>
+    api.get<PublicExamAttempt[]>('/public-exams/attempts/in-progress', {
+      params: subjectId ? { subject_id: subjectId } : undefined,
+    }),
+  getAttempt: (attemptId: string) =>
+    api.get<PublicExamAttempt>(`/public-exams/attempts/${attemptId}`),
+  saveAnswer: (
+    attemptId: string,
+    questionId: number,
+    data: {
+      selected_option: number | null;
+      written_answer: string | null;
+      elapsed_seconds: number;
+    },
+  ) => api.put<PublicExamAttemptAnswer>(
+    `/public-exams/attempts/${attemptId}/answers/${questionId}`,
+    data,
+  ),
+  submitAttempt: (attemptId: string) =>
+    api.post<PublicExamResult>(`/public-exams/attempts/${attemptId}/submit`),
+  getResult: (attemptId: string) =>
+    api.get<PublicExamResult>(`/public-exams/attempts/${attemptId}/result`),
+  getWrongAnswers: (attemptId: string) =>
+    api.get<{ attempt_id: string; items: PublicExamResultItem[] }>(
+      `/public-exams/attempts/${attemptId}/wrong-answers`,
+    ),
+  adminGetExams: () => api.get<PublicExam[]>('/public-exams/admin/exams'),
+  adminGetRounds: (examId: number) =>
+    api.get<PublicExamRound[]>(`/public-exams/admin/exams/${examId}/rounds`),
+  adminGetSubjects: (roundId: number) =>
+    api.get<PublicExamSubject[]>(`/public-exams/admin/rounds/${roundId}/subjects`),
+  adminCreateExam: (data: { code: string; name: string; description?: string; is_active: boolean }) =>
+    api.post<PublicExam>('/public-exams', data),
+  adminUpdateExam: (examId: number, data: Partial<Pick<PublicExam, 'code' | 'name' | 'description' | 'is_active'>>) =>
+    api.put<PublicExam>(`/public-exams/${examId}`, data),
+  adminCreateRound: (examId: number, data: { exam_year: number; round_identifier: string; display_name?: string; is_published: boolean }) =>
+    api.post<PublicExamRound>(`/public-exams/${examId}/rounds`, data),
+  adminUpdateRound: (roundId: number, data: Partial<Pick<PublicExamRound, 'exam_year' | 'round_identifier' | 'display_name' | 'held_on' | 'is_published'>>) =>
+    api.put<PublicExamRound>(`/public-exams/rounds/${roundId}`, data),
+  adminCreateSubject: (roundId: number, data: { code?: string; name: string; display_order: number }) =>
+    api.post<PublicExamSubject>(`/public-exams/rounds/${roundId}/subjects`, data),
+  adminUpdateSubject: (subjectId: number, data: Partial<Pick<PublicExamSubject, 'code' | 'name' | 'display_order'>>) =>
+    api.put<PublicExamSubject>(`/public-exams/subjects/${subjectId}`, data),
+  adminGetDocuments: (roundId?: number) => api.get<PublicExamSourceDocument[]>(
+    '/public-exams/admin/documents', { params: roundId ? { round_id: roundId } : undefined },
+  ),
+  adminGetDocument: (documentId: number) =>
+    api.get<PublicExamSourceDocumentDetail>(`/public-exams/admin/documents/${documentId}`),
+  adminUploadDocument: (subjectId: number, data: FormData) =>
+    api.post<PublicExamSourceDocumentDetail>(`/public-exams/admin/subjects/${subjectId}/documents`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
+    }),
+  adminOpenDocument: (documentId: number) =>
+    api.get<Blob>(`/public-exams/admin/documents/${documentId}/file`, { responseType: 'blob' }),
+  adminUpdateQuestion: (questionId: number, data: Partial<PublicExamQuestionAdmin>) =>
+    api.put<PublicExamQuestionAdmin>(`/public-exams/questions/${questionId}`, data),
+  adminPublishDocument: (documentId: number) =>
+    api.post<{ document_id: number; published_count: number }>(`/public-exams/admin/documents/${documentId}/publish`),
 };
 
 export const recommendationsAPI = {

@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -156,6 +157,168 @@ class QuizSession(Base):
     score_percent = Column(Float, nullable=False)
     achievement_score = Column(Float, nullable=False)
     completed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PublicExam(Base):
+    __tablename__ = "public_exams"
+
+    id = Column(BigInteger, primary_key=True)
+    code = Column(String(64), nullable=False, unique=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    rounds = relationship("PublicExamRound", back_populates="exam")
+
+
+class PublicExamRound(Base):
+    __tablename__ = "public_exam_rounds"
+
+    id = Column(BigInteger, primary_key=True)
+    exam_id = Column(
+        BigInteger, ForeignKey("public_exams.id", ondelete="RESTRICT"), nullable=False
+    )
+    exam_year = Column(Integer, nullable=False)
+    round_identifier = Column(String(100), nullable=False)
+    display_name = Column(String(255), nullable=True)
+    held_on = Column(Date, nullable=True)
+    is_published = Column(Boolean, nullable=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    exam = relationship("PublicExam", back_populates="rounds")
+    subjects = relationship("PublicExamSubject", back_populates="round")
+    source_documents = relationship("PublicExamSourceDocument", back_populates="round")
+
+
+class PublicExamSubject(Base):
+    __tablename__ = "public_exam_subjects"
+
+    id = Column(BigInteger, primary_key=True)
+    round_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_rounds.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    code = Column(String(64), nullable=True)
+    name = Column(String(200), nullable=False)
+    display_order = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    round = relationship("PublicExamRound", back_populates="subjects")
+    questions = relationship("PublicExamQuestion", back_populates="subject")
+
+
+class PublicExamSourceDocument(Base):
+    __tablename__ = "public_exam_source_documents"
+
+    id = Column(BigInteger, primary_key=True)
+    round_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_rounds.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    original_file_name = Column(String(500), nullable=False)
+    storage_key = Column(String(1000), nullable=True)
+    source_url = Column(Text, nullable=True)
+    source_organization = Column(String(255), nullable=True)
+    source_notes = Column(Text, nullable=True)
+    sha256 = Column(String(64), nullable=True)
+    uploaded_by = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    uploaded_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    round = relationship("PublicExamRound", back_populates="source_documents")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class PublicExamQuestion(Base):
+    __tablename__ = "public_exam_questions"
+
+    id = Column(BigInteger, primary_key=True)
+    subject_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_document_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_source_documents.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    question_number = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    options = Column(JSONB, nullable=True)
+    question_type = Column(
+        String(32), nullable=False, server_default="MULTIPLE_CHOICE"
+    )
+    correct_option = Column(Integer, nullable=True)
+    correct_answer = Column(Text, nullable=True)
+    explanation = Column(Text, nullable=True)
+    source_page = Column(Integer, nullable=True)
+    answer_verification_status = Column(
+        String(16), nullable=False, server_default="MISSING"
+    )
+    publication_status = Column(String(16), nullable=False, server_default="DRAFT")
+    review_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    subject = relationship("PublicExamSubject", back_populates="questions")
+    source_document = relationship("PublicExamSourceDocument")
+
+
+class PublicExamAttempt(Base):
+    __tablename__ = "public_exam_attempts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    subject_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status = Column(String(16), nullable=False, server_default="IN_PROGRESS")
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_activity_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    abandoned_at = Column(DateTime(timezone=True), nullable=True)
+    total_elapsed_seconds = Column(BigInteger, nullable=True)
+    total_questions = Column(Integer, nullable=True)
+    correct_answers = Column(Integer, nullable=True)
+    incorrect_answers = Column(Integer, nullable=True)
+    score_percent = Column(Numeric(5, 2), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PublicExamAttemptAnswer(Base):
+    __tablename__ = "public_exam_attempt_answers"
+
+    id = Column(BigInteger, primary_key=True)
+    attempt_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("public_exam_attempts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question_id = Column(
+        BigInteger,
+        ForeignKey("public_exam_questions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    sequence_number = Column(Integer, nullable=False)
+    selected_option = Column(Integer, nullable=True)
+    written_answer = Column(Text, nullable=True)
+    elapsed_seconds = Column(Numeric(12, 3), nullable=False, server_default="0")
+    is_correct = Column(Boolean, nullable=True)
+    answered_at = Column(DateTime(timezone=True), nullable=True)
+    graded_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 # 테이블 생성
 def create_tables():

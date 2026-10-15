@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_FILE_EXTENSIONS: list = [".java", ".js", ".sql", ".txt", ".md", ".xlsx", ".xls"]
+    PUBLIC_EXAM_DOCUMENT_STORAGE: str = "auto"  # auto, local, or vercel_blob
+    PUBLIC_EXAM_DOCUMENT_DIR: str = "uploads/public-exams"
+    PUBLIC_EXAM_PDF_MAX_BYTES: int = 4 * 1024 * 1024
+    BLOB_READ_WRITE_TOKEN: str = ""
     
     # CORS
     CORS_ORIGINS: list = ["http://localhost:3000", "https://yourfrontend.vercel.app"]

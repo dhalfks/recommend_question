@@ -27,6 +27,9 @@ export default function Navbar() {
               <Link href="/upload" className="rounded-lg px-3 py-2 hover:bg-white/10">파일 등록</Link>
             </>
           )}
+          {user?.role === 'ADMIN' && (
+            <Link href="/admin/public-exams" className="rounded-lg px-3 py-2 hover:bg-white/10">공통 기출 관리</Link>
+          )}
           {!loading && !user && (
             <>
               <Link href="/login" className="rounded-lg px-3 py-2 hover:bg-white/10">로그인</Link>

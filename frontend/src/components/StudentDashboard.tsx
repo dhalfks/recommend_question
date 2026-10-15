@@ -283,6 +283,20 @@ export default function StudentDashboard() {
           </div>
         </section>
 
+        <section className="surface-card my-8 overflow-hidden border-l-4 border-l-[#8B5CF6]">
+          <div className="flex flex-col justify-between gap-5 p-6 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-sm font-semibold text-[#8B5CF6]">모든 학생 공통</p>
+              <h2 className="mt-1 text-2xl font-bold text-[#242C34]">자격증 기출문제</h2>
+              <p className="mt-2 text-[#6C757D]">정보처리기사와 SQLD의 등록된 연도·회차·과목을 선택해 풀어보세요.</p>
+            </div>
+            <button type="button" onClick={() => router.push('/public-exams')}
+              className="shrink-0 rounded-xl bg-[#8B5CF6] px-6 py-4 font-bold text-white transition hover:bg-[#7448D1]">
+              공통 기출 시작 →
+            </button>
+          </div>
+        </section>
+
         {loading ? (
           <div className="py-20 text-center text-[#6C757D]">학습 기록을 불러오는 중...</div>
         ) : (
@@ -327,7 +341,7 @@ export default function StudentDashboard() {
                   <option value={20}>20문항</option>
                 </select>
               </label>}
-              <button className="success-button h-[50px]">{quizMode === 'CODE' ? '코드 1문제 시작' : '랜덤 문제'}</button>
+              <button className="success-button h-[50px]">{quizMode === 'CODE' ? '코딩 테스트 시작' : '랜덤 문제'}</button>
             </form>
             </section>
 
