@@ -24,6 +24,7 @@ export default function Navbar() {
               <Link href="/analytics" className="rounded-lg px-3 py-2 hover:bg-white/10">문항 분석</Link>
               <Link href="/create-question" className="rounded-lg px-3 py-2 hover:bg-white/10">문제 출제</Link>
               <Link href="/manage-questions" className="rounded-lg px-3 py-2 hover:bg-white/10">문제 관리</Link>
+              {user?.role === 'PROFESSOR' && <Link href="/exam-papers" className="rounded-lg px-3 py-2 hover:bg-white/10">시험지 출력</Link>}
               <Link href="/upload" className="rounded-lg px-3 py-2 hover:bg-white/10">파일 등록</Link>
             </>
           )}
@@ -41,9 +42,7 @@ export default function Navbar() {
               <Link href="/profile" className="hidden rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 sm:inline">
                 {user.name} · {roleLabel[user.role]}
               </Link>
-              <button type="button" onClick={logout} className="rounded-lg px-3 py-2 hover:bg-white/10">
-                로그아웃
-              </button>
+              <button type="button" onClick={logout} className="rounded-lg px-3 py-2 hover:bg-white/10">로그아웃</button>
             </>
           )}
         </nav>

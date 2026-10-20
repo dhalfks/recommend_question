@@ -38,6 +38,52 @@ export type ProfessorOption = {
   course_name?: string | null;
 };
 
+export type QuestionBankQuestion = {
+  id: number;
+  subject_id: number;
+  professor_id?: number | null;
+  question_type: 'EXCEL' | 'CODE';
+  title: string;
+  content: string;
+  answer_type: 'MULTIPLE_CHOICE' | 'SUBJECTIVE' | 'CODE_INPUT';
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
+  options?: string | null;
+  correct_answer?: string | null;
+  correct_option?: number | null;
+  explanation?: string | null;
+  code_snippet?: string | null;
+  answer_code_snippet?: string | null;
+  subject_unit?: string | null;
+  is_required: boolean;
+};
+
+export type ExamPaperItem = {
+  id: number;
+  question_id: number;
+  display_order: number;
+  subject_id: number;
+  subject_name: string;
+  title: string;
+  content: string;
+  answer_type: 'MULTIPLE_CHOICE' | 'SUBJECTIVE' | 'CODE_INPUT';
+  options?: string[] | null;
+  code_snippet?: string | null;
+  correct_answer?: string | null;
+  correct_option?: number | null;
+  explanation?: string | null;
+};
+
+export type ExamPaper = {
+  id: number;
+  title: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+  items: ExamPaperItem[];
+};
+
+export type ExamPaperSummary = Omit<ExamPaper, 'items'> & { item_count: number };
+
 export type PublicExam = {
   id: number;
   code: string;
@@ -204,7 +250,7 @@ export const subjectsAPI = {
 
 // 문제 API
 export const questionsAPI = {
-  getAll: (params?: any) => api.get('/questions', { params }),
+  getAll: (params?: any) => api.get<QuestionBankQuestion[]>('/questions', { params }),
   getById: (id: number) => api.get(`/questions/${id}`),
   create: (data: any) => api.post('/questions', data),
   update: (id: number, data: any) => api.put(`/questions/${id}`, data),
@@ -213,6 +259,16 @@ export const questionsAPI = {
     api.get('/questions/subject-units', { params: { subject_id: subjectId } }),
   getRandomQuestions: (data: any) => api.post('/questions/random/quiz', data),
   getDifficultyStats: (params?: any) => api.get('/questions/stats/difficulty', { params }),
+};
+
+export const examPapersAPI = {
+  list: () => api.get<ExamPaperSummary[]>('/exam-papers'),
+  get: (paperId: number) => api.get<ExamPaper>(`/exam-papers/${paperId}`),
+  create: (data: { title: string; description?: string | null; question_ids: number[] }) =>
+    api.post<ExamPaper>('/exam-papers', data),
+  update: (paperId: number, data: { title: string; description?: string | null; question_ids: number[] }) =>
+    api.put<ExamPaper>(`/exam-papers/${paperId}`, data),
+  delete: (paperId: number) => api.delete(`/exam-papers/${paperId}`),
 };
 
 export const progressAPI = {

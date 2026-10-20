@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, func
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, CheckConstraint, Index, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -104,6 +104,79 @@ class Question(Base):
     # 관계
     subject = relationship("Subject", back_populates="questions")
     professor = relationship("User", foreign_keys=[professor_id])
+
+
+class ExamPaper(Base):
+    __tablename__ = "exam_papers"
+    __table_args__ = (
+        CheckConstraint("BTRIM(title) <> ''", name="exam_papers_title_not_blank"),
+        Index("idx_exam_papers_professor_updated", "professor_id", "updated_at"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    professor_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    professor = relationship("User", foreign_keys=[professor_id])
+    items = relationship(
+        "ExamPaperItem",
+        back_populates="paper",
+        cascade="all, delete-orphan",
+        order_by="ExamPaperItem.display_order",
+    )
+
+
+class ExamPaperItem(Base):
+    __tablename__ = "exam_paper_items"
+    __table_args__ = (
+        CheckConstraint("display_order > 0", name="exam_paper_items_order_positive"),
+        CheckConstraint(
+            "answer_type IN ('MULTIPLE_CHOICE', 'SUBJECTIVE', 'CODE_INPUT')",
+            name="exam_paper_items_answer_type_valid",
+        ),
+        CheckConstraint(
+            "options IS NULL OR jsonb_typeof(options) = 'array'",
+            name="exam_paper_items_options_array",
+        ),
+        CheckConstraint(
+            "correct_option IS NULL OR correct_option BETWEEN 1 AND 4",
+            name="exam_paper_items_correct_option_valid",
+        ),
+        UniqueConstraint("exam_paper_id", "display_order", name="uq_exam_paper_item_order"),
+        UniqueConstraint("exam_paper_id", "question_id", name="uq_exam_paper_item_question"),
+        Index("idx_exam_paper_items_paper_order", "exam_paper_id", "display_order"),
+        Index("idx_exam_paper_items_question_id", "question_id"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    exam_paper_id = Column(
+        BigInteger, ForeignKey("exam_papers.id", ondelete="CASCADE"), nullable=False
+    )
+    question_id = Column(
+        Integer, ForeignKey("questions.id", ondelete="RESTRICT"), nullable=False
+    )
+    display_order = Column(Integer, nullable=False)
+    subject_id = Column(Integer, ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=False)
+    subject_name = Column(String(100), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    answer_type = Column(String(32), nullable=False)
+    options = Column(JSONB, nullable=True)
+    code_snippet = Column(Text, nullable=True)
+    correct_answer = Column(Text, nullable=True)
+    correct_option = Column(Integer, nullable=True)
+    explanation = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    paper = relationship("ExamPaper", back_populates="items")
+    question = relationship("Question")
 
 class ExcelQuestion(Base):
     __tablename__ = "excel_questions"
