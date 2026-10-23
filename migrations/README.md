@@ -22,3 +22,20 @@
 새 코드가 먼저 배포되면 아직 존재하지 않는 컬럼을 조회해 API가 실패합니다.
 
 롤백 파일은 새 컬럼과 제약조건을 제거하므로 운영 데이터가 기록된 이후에는 그대로 실행하지 않습니다. 필요한 데이터를 먼저 백업하거나 역마이그레이션해야 합니다.
+
+## 토스페이먼츠 결제 기반
+
+`20261023_add_billing_tables.sql`은 기존 문제은행 테이블을 변경하지 않고 다음 신규 테이블만 추가합니다.
+
+- `billing_plans`
+- `user_subscriptions`
+- `payment_orders`
+- `payment_transactions`
+- `ai_usage_events`
+- `payment_webhook_events`
+
+초기 상품으로 학생 Pro 및 교수자 Pro 30일 단건 이용권을 추가합니다. 가격과 기능 한도는 서버가 이 테이블에서 조회하며, 클라이언트가 보낸 금액을 신뢰하지 않습니다.
+
+적용 전에는 `docs/readonly_schema_inspection.sql`로 대상 DB의 `users.id`가 `INTEGER`인지 확인해야 합니다. Neon 테스트 브랜치에 먼저 적용하고 신규 테이블, 제약조건, 초기 상품을 검증한 뒤 운영 환경에 적용합니다.
+
+`20261023_add_billing_tables_rollback.sql`은 6개 신규 테이블을 모두 삭제합니다. 결제 또는 AI 사용 기록이 한 건이라도 생성된 환경에서는 감사 데이터 보존 계획 없이 실행하면 안 됩니다.
