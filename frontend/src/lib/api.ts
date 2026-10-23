@@ -93,6 +93,8 @@ export type AdminBillingPayment = BillingPayment & {
   user_name: string;
   user_email: string;
   user_role: UserRole;
+  can_close: boolean;
+  can_recover: boolean;
 };
 
 export type ProfessorOption = {
@@ -309,6 +311,10 @@ export const billingAPI = {
   payments: () => api.get<BillingPayment[]>('/billing/payments'),
   adminPayments: (status?: BillingPayment['status']) =>
     api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
+  closeAdminPayment: (orderId: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
+  recoverAdminPayment: (orderId: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/recover`, undefined, { timeout: 30000 }),
   createOrder: (planCode: string) =>
     api.post<BillingOrder>('/billing/orders', { plan_code: planCode }),
   confirm: (data: { payment_key: string; order_id: string; amount: number }) =>

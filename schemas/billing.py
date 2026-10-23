@@ -77,6 +77,14 @@ class AdminPaymentResponse(PaymentHistoryResponse):
     user_name: str
     user_email: str
     user_role: Literal["STUDENT", "PROFESSOR", "ADMIN"]
+    can_close: bool
+    can_recover: bool
+
+
+class AdminPaymentActionResponse(BaseModel):
+    order_id: str
+    status: Literal["PAID", "CANCELED"]
+    message: str
 
 
 class FeatureEntitlementResponse(BaseModel):

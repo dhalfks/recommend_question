@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from typing import Literal
+from datetime import datetime, timedelta, timezone
 
-from models import BillingPlan, PaymentOrder, User, UserRole, get_db
+from models import BillingPlan, PaymentOrder, PaymentTransaction, User, UserRole, get_db
 from schemas.billing import (
+    AdminPaymentActionResponse,
     AdminPaymentResponse,
     BillingPlanResponse,
     BillingMeResponse,
@@ -14,9 +16,11 @@ from schemas.billing import (
     PaymentOrderResponse,
 )
 from services.billing import (
+    close_unpaid_order,
     confirm_payment,
     create_payment_order,
     order_response,
+    recover_payment,
     subscription_response,
 )
 from services.auth import get_current_user, require_roles
@@ -106,6 +110,19 @@ def list_admin_payments(
         .limit(limit)
         .all()
     )
+    order_ids = [order.id for order, _ in rows]
+    transactions = (
+        db.query(PaymentTransaction)
+        .filter(PaymentTransaction.payment_order_id.in_(order_ids))
+        .order_by(PaymentTransaction.created_at.desc(), PaymentTransaction.id.desc())
+        .all()
+        if order_ids
+        else []
+    )
+    latest_transactions: dict[int, PaymentTransaction] = {}
+    for transaction in transactions:
+        latest_transactions.setdefault(transaction.payment_order_id, transaction)
+    close_before = datetime.now(timezone.utc) - timedelta(minutes=30)
     return [
         {
             "order_id": order.order_id,
@@ -120,6 +137,48 @@ def list_admin_payments(
             "user_name": user.name,
             "user_email": user.email,
             "user_role": user.role,
+            "can_close": (
+                order.status == "READY"
+                and order.created_at <= close_before
+                and not any(
+                    transaction.payment_order_id == order.id
+                    and transaction.provider_payment_id is not None
+                    for transaction in transactions
+                )
+            ),
+            "can_recover": (
+                order.status == "READY"
+                and order.id in latest_transactions
+                and latest_transactions[order.id].provider_payment_id is not None
+                and (
+                    latest_transactions[order.id].status == "PENDING"
+                    or (
+                        latest_transactions[order.id].status == "FAILED"
+                        and latest_transactions[order.id].failure_code == "TOSS_NETWORK_ERROR"
+                    )
+                )
+            ),
         }
         for order, user in rows
     ]
+
+
+@router.post("/admin/payments/{order_id}/close", response_model=AdminPaymentActionResponse)
+def close_admin_unpaid_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    order = close_unpaid_order(db, order_id=order_id)
+    return {"order_id": order.order_id, "status": order.status, "message": "미결제 주문을 종료했습니다."}
+
+
+@router.post("/admin/payments/{order_id}/recover", response_model=AdminPaymentActionResponse)
+def recover_admin_payment(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    order, _, _ = recover_payment(db, order_id=order_id, toss_client=toss_client)
+    return {"order_id": order.order_id, "status": order.status, "message": "결제를 확인하고 복구했습니다."}

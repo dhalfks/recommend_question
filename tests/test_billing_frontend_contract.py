@@ -63,6 +63,10 @@ class BillingFrontendContractTests(unittest.TestCase):
         self.assertIn("roles={['ADMIN']}", page)
         self.assertIn("billingAPI.adminPayments", page)
         self.assertNotIn("provider_payment_id", page)
+        self.assertIn("미결제 주문 종료", page)
+        self.assertIn("결제 상태 확인 및 복구", page)
+        self.assertIn("payment.can_close", page)
+        self.assertIn("payment.can_recover", page)
 
 
 if __name__ == "__main__":

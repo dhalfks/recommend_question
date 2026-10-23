@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,9 @@ from services.billing import (
     _safe_provider_response,
     _validate_toss_payment,
     confirm_payment,
+    close_unpaid_order,
     create_payment_order,
+    recover_payment,
 )
 from services.toss_payments import TossPaymentError, TossPaymentsClient
 
@@ -20,6 +23,7 @@ def query_result(value):
     query = MagicMock()
     query.filter.return_value = query
     query.with_for_update.return_value = query
+    query.order_by.return_value = query
     query.first.return_value = value
     return query
 
@@ -233,6 +237,73 @@ class PaymentConfirmationTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 400)
         toss.confirm_payment.assert_not_called()
+
+
+class AdminPaymentRecoveryTests(unittest.TestCase):
+    def test_old_ready_order_without_payment_key_can_be_closed(self):
+        now = datetime.now(timezone.utc)
+        order = SimpleNamespace(
+            id=10,
+            order_id="qb_old_ready",
+            status="READY",
+            created_at=now - timedelta(minutes=31),
+        )
+        db = MagicMock()
+        db.query.side_effect = [query_result(order), query_result(None)]
+
+        result = close_unpaid_order(db, order_id=order.order_id, now=now)
+
+        self.assertIs(result, order)
+        self.assertEqual(order.status, "CANCELED")
+        self.assertEqual(order.failure_code, "ADMIN_CLOSED_UNPAID")
+        db.commit.assert_called_once()
+
+    def test_ready_order_with_payment_key_cannot_be_closed(self):
+        now = datetime.now(timezone.utc)
+        order = SimpleNamespace(
+            id=10,
+            order_id="qb_attempted",
+            status="READY",
+            created_at=now - timedelta(hours=1),
+        )
+        transaction = SimpleNamespace(provider_payment_id="pay_1")
+        db = MagicMock()
+        db.query.side_effect = [query_result(order), query_result(transaction)]
+
+        with self.assertRaises(HTTPException) as raised:
+            close_unpaid_order(db, order_id=order.order_id, now=now)
+
+        self.assertEqual(raised.exception.status_code, 409)
+        db.commit.assert_not_called()
+
+    @patch("services.billing.confirm_payment")
+    def test_network_failure_with_payment_key_can_be_recovered(self, confirm):
+        order = SimpleNamespace(id=10, order_id="qb_recover", user_id=7, amount=4900, status="READY")
+        transaction = SimpleNamespace(
+            provider_payment_id="pay_1",
+            status="FAILED",
+            failure_code="TOSS_NETWORK_ERROR",
+        )
+        user = SimpleNamespace(id=7, role=UserRole.STUDENT)
+        db = MagicMock()
+        db.query.side_effect = [query_result(order), query_result(transaction), query_result(user)]
+        expected = (order, SimpleNamespace(), SimpleNamespace())
+        confirm.return_value = expected
+
+        result = recover_payment(db, order_id=order.order_id, toss_client=MagicMock())
+
+        self.assertIs(result, expected)
+        confirm.assert_called_once()
+
+    def test_ready_order_without_payment_key_cannot_be_recovered(self):
+        order = SimpleNamespace(id=10, order_id="qb_no_attempt", status="READY")
+        db = MagicMock()
+        db.query.side_effect = [query_result(order), query_result(None)]
+
+        with self.assertRaises(HTTPException) as raised:
+            recover_payment(db, order_id=order.order_id, toss_client=MagicMock())
+
+        self.assertEqual(raised.exception.status_code, 409)
 
 
 if __name__ == "__main__":

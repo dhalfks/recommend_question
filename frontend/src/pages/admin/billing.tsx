@@ -21,16 +21,56 @@ export default function AdminBillingPage() {
   const [status, setStatus] = useState<'' | BillingPayment['status']>('');
   const [payments, setPayments] = useState<AdminBillingPayment[]>([]);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [processingOrderId, setProcessingOrderId] = useState('');
 
-  useEffect(() => {
+  const loadPayments = () => {
     setLoading(true);
     setError('');
-    billingAPI.adminPayments(status || undefined)
+    return billingAPI.adminPayments(status || undefined)
       .then(({ data }) => setPayments(data))
       .catch(() => setError('결제 현황을 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    void loadPayments();
   }, [status]);
+
+  const closeUnpaidOrder = async (payment: AdminBillingPayment) => {
+    if (!window.confirm('PG 결제키가 없는 장시간 미완료 주문을 종료할까요? 종료 후에는 결제할 수 없습니다.')) return;
+    setProcessingOrderId(payment.order_id);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await billingAPI.closeAdminPayment(payment.order_id);
+      setNotice(data.message ?? '미결제 주문을 종료했습니다.');
+      await loadPayments();
+    } catch (caught: any) {
+      const detail = caught.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? '미결제 주문을 종료하지 못했습니다.');
+    } finally {
+      setProcessingOrderId('');
+    }
+  };
+
+  const recoverPayment = async (payment: AdminBillingPayment) => {
+    if (!window.confirm('저장된 결제키로 Toss 승인을 다시 확인하고 복구할까요?')) return;
+    setProcessingOrderId(payment.order_id);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await billingAPI.recoverAdminPayment(payment.order_id);
+      setNotice(data.message ?? '결제를 확인하고 복구했습니다.');
+      await loadPayments();
+    } catch (caught: any) {
+      const detail = caught.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? '결제를 복구하지 못했습니다.');
+    } finally {
+      setProcessingOrderId('');
+    }
+  };
 
   const paidTotal = useMemo(
     () => payments.filter((payment) => payment.status === 'PAID').reduce((sum, payment) => sum + payment.amount, 0),
@@ -59,10 +99,11 @@ export default function AdminBillingPage() {
           </div>
 
           {error && <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
+          {notice && <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-800">{notice}</div>}
           <section className="surface-card mt-6 overflow-x-auto p-6">
             {loading ? <p>불러오는 중...</p> : payments.length === 0 ? <p className="text-[#6C757D]">표시할 주문이 없습니다.</p> : (
               <table className="w-full min-w-[850px] text-left text-sm">
-                <thead><tr className="border-b text-[#6C757D]"><th className="pb-3">주문시각</th><th className="pb-3">구매자</th><th className="pb-3">상품</th><th className="pb-3">주문번호</th><th className="pb-3 text-right">금액</th><th className="pb-3 text-right">상태</th></tr></thead>
+                <thead><tr className="border-b text-[#6C757D]"><th className="pb-3">주문시각</th><th className="pb-3">구매자</th><th className="pb-3">상품</th><th className="pb-3">주문번호</th><th className="pb-3 text-right">금액</th><th className="pb-3 text-right">상태·처리</th></tr></thead>
                 <tbody>{payments.map((payment) => (
                   <tr key={payment.order_id} className="border-b border-[#E9ECEF] last:border-0">
                     <td className="py-4">{new Date(payment.created_at).toLocaleString('ko-KR')}</td>
@@ -70,7 +111,27 @@ export default function AdminBillingPage() {
                     <td className="py-4">{payment.plan_name}</td>
                     <td className="py-4 font-mono text-xs">{payment.order_id}</td>
                     <td className="py-4 text-right font-semibold">{payment.amount.toLocaleString('ko-KR')}원</td>
-                    <td className="py-4 text-right">{statusLabel[payment.status]}</td>
+                    <td className="py-4 text-right">
+                      <p>{statusLabel[payment.status]}</p>
+                      {payment.status === 'READY' && (
+                        <div className="mt-2 flex flex-col items-end gap-1">
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-red-700 underline disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={!payment.can_close || processingOrderId === payment.order_id}
+                            title={payment.can_close ? '장시간 미완료 주문을 종료합니다.' : '결제키가 없어야 하며 생성 후 30분이 지나야 합니다.'}
+                            onClick={() => void closeUnpaidOrder(payment)}
+                          >미결제 주문 종료</button>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-[#3B86D1] underline disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={!payment.can_recover || processingOrderId === payment.order_id}
+                            title={payment.can_recover ? '저장된 결제키로 승인을 안전하게 재시도합니다.' : '결제키가 저장된 네트워크 실패 주문만 복구할 수 있습니다.'}
+                            onClick={() => void recoverPayment(payment)}
+                          >결제 상태 확인 및 복구</button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}</tbody>
               </table>
