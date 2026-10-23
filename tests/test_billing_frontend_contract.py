@@ -49,8 +49,20 @@ class BillingFrontendContractTests(unittest.TestCase):
         self.assertIn("PAY_PROCESS_CANCELED", FAIL)
 
     def test_api_has_all_billing_endpoints(self):
-        for path in ("/billing/plans", "/billing/me", "/billing/orders", "/billing/payments/confirm"):
+        for path in ("/billing/plans", "/billing/me", "/billing/payments", "/billing/orders", "/billing/payments/confirm"):
             self.assertIn(path, API)
+
+    def test_profile_billing_summary_loads_payment_history(self):
+        summary = (ROOT / "frontend/src/components/BillingSummary.tsx").read_text(encoding="utf-8")
+        self.assertIn("billingAPI.payments()", summary)
+        self.assertIn("payment.order_id", summary)
+        self.assertNotIn("provider_payment_id", summary)
+
+    def test_admin_billing_page_is_admin_only(self):
+        page = (ROOT / "frontend/src/pages/admin/billing.tsx").read_text(encoding="utf-8")
+        self.assertIn("roles={['ADMIN']}", page)
+        self.assertIn("billingAPI.adminPayments", page)
+        self.assertNotIn("provider_payment_id", page)
 
 
 if __name__ == "__main__":

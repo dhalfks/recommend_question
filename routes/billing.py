@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+from typing import Literal
 
-from models import BillingPlan, User, UserRole, get_db
+from models import BillingPlan, PaymentOrder, User, UserRole, get_db
 from schemas.billing import (
+    AdminPaymentResponse,
     BillingPlanResponse,
     BillingMeResponse,
     PaymentConfirmRequest,
     PaymentConfirmResponse,
+    PaymentHistoryResponse,
     PaymentOrderCreate,
     PaymentOrderResponse,
 )
@@ -16,7 +19,7 @@ from services.billing import (
     order_response,
     subscription_response,
 )
-from services.auth import get_current_user
+from services.auth import get_current_user, require_roles
 from services.toss_payments import TossPaymentsClient, get_toss_client
 from services.entitlements import get_entitlement_snapshot
 
@@ -72,3 +75,51 @@ def get_my_billing(
     current_user: User = Depends(get_current_user),
 ):
     return get_entitlement_snapshot(db, current_user)
+
+
+@router.get("/payments", response_model=list[PaymentHistoryResponse])
+def list_my_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.user_id == current_user.id)
+        .order_by(PaymentOrder.created_at.desc(), PaymentOrder.id.desc())
+        .limit(50)
+        .all()
+    )
+
+
+@router.get("/admin/payments", response_model=list[AdminPaymentResponse])
+def list_admin_payments(
+    payment_status: Literal["READY", "PAID", "FAILED", "CANCELED", "REFUNDED"] | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    query = db.query(PaymentOrder, User).join(User, User.id == PaymentOrder.user_id)
+    if payment_status:
+        query = query.filter(PaymentOrder.status == payment_status.upper())
+    rows = (
+        query.order_by(PaymentOrder.created_at.desc(), PaymentOrder.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "order_id": order.order_id,
+            "plan_code": order.plan_code,
+            "plan_name": order.plan_name,
+            "amount": order.amount,
+            "currency": order.currency,
+            "status": order.status,
+            "created_at": order.created_at,
+            "paid_at": order.paid_at,
+            "user_id": user.id,
+            "user_name": user.name,
+            "user_email": user.email,
+            "user_role": user.role,
+        }
+        for order, user in rows
+    ]

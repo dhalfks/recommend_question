@@ -6,8 +6,8 @@ import unittest
 from unittest.mock import MagicMock
 
 from models import BillingPlan, UserRole
-from routes.billing import list_billing_plans
-from schemas.billing import BillingPlanResponse
+from routes.billing import list_admin_payments, list_billing_plans, list_my_payments
+from schemas.billing import AdminPaymentResponse, BillingPlanResponse, PaymentHistoryResponse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +69,45 @@ class BillingRouteTests(unittest.TestCase):
         self.assertIn("Depends(get_current_user)", ROUTE)
         self.assertIn('prefix="/api/billing"', MAIN)
         self.assertIn('@router.get("/me", response_model=BillingMeResponse)', ROUTE)
+
+    def test_payment_history_is_scoped_to_current_user(self):
+        db = MagicMock()
+        query = db.query.return_value
+        query.filter.return_value = query
+        query.order_by.return_value = query
+        query.limit.return_value = query
+        query.all.return_value = []
+
+        result = list_my_payments(db=db, current_user=SimpleNamespace(id=42))
+
+        self.assertEqual(result, [])
+        query.filter.assert_called_once()
+        query.limit.assert_called_once_with(50)
+
+    def test_payment_history_schema_hides_provider_details(self):
+        fields = PaymentHistoryResponse.model_fields
+        self.assertNotIn("provider_payment_id", fields)
+        self.assertNotIn("provider_response", fields)
+
+    def test_admin_payment_history_is_limited_and_has_customer_context(self):
+        db = MagicMock()
+        query = db.query.return_value
+        query.join.return_value = query
+        query.order_by.return_value = query
+        query.limit.return_value = query
+        query.all.return_value = []
+
+        result = list_admin_payments(
+            payment_status=None,
+            limit=100,
+            db=db,
+            current_user=SimpleNamespace(role=UserRole.ADMIN),
+        )
+
+        self.assertEqual(result, [])
+        query.limit.assert_called_once_with(100)
+        self.assertIn("user_email", AdminPaymentResponse.model_fields)
+        self.assertNotIn("provider_payment_id", AdminPaymentResponse.model_fields)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BillingMe, billingAPI } from '@/lib/api';
+import { BillingMe, BillingPayment, billingAPI } from '@/lib/api';
 
 
 const featureLabels: Record<string, string> = {
@@ -9,14 +9,26 @@ const featureLabels: Record<string, string> = {
   QUESTION_GENERATION: 'AI 문제 생성',
 };
 
+const paymentStatusLabels: Record<BillingPayment['status'], string> = {
+  READY: '결제 대기',
+  PAID: '결제 완료',
+  FAILED: '결제 실패',
+  CANCELED: '결제 취소',
+  REFUNDED: '환불 완료',
+};
+
 
 export default function BillingSummary() {
   const [billing, setBilling] = useState<BillingMe | null>(null);
+  const [payments, setPayments] = useState<BillingPayment[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    billingAPI.me()
-      .then(({ data }) => setBilling(data))
+    Promise.all([billingAPI.me(), billingAPI.payments()])
+      .then(([billingResponse, paymentsResponse]) => {
+        setBilling(billingResponse.data);
+        setPayments(paymentsResponse.data);
+      })
       .catch(() => setError('이용권 정보를 불러오지 못했습니다.'));
   }, []);
 
@@ -53,6 +65,28 @@ export default function BillingSummary() {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {payments.length > 0 && (
+        <div className="mt-8 border-t border-[#E9ECEF] pt-6">
+          <h3 className="text-lg font-bold text-[#242C34]">결제 이력</h3>
+          <div className="mt-3 divide-y divide-[#E9ECEF]">
+            {payments.map((payment) => (
+              <div key={payment.order_id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+                <div>
+                  <p className="font-semibold text-[#242C34]">{payment.plan_name}</p>
+                  <p className="mt-1 text-xs text-[#6C757D]">
+                    {new Date(payment.paid_at ?? payment.created_at).toLocaleString('ko-KR')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-[#242C34]">{payment.amount.toLocaleString('ko-KR')}원</p>
+                  <p className="mt-1 text-xs text-[#6C757D]">{paymentStatusLabels[payment.status]}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>

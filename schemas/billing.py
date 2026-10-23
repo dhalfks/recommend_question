@@ -61,6 +61,24 @@ class PaymentConfirmResponse(BaseModel):
     subscription: SubscriptionResponse
 
 
+class PaymentHistoryResponse(BaseModel):
+    order_id: str
+    plan_code: str
+    plan_name: str
+    amount: int
+    currency: Literal["KRW"]
+    status: Literal["READY", "PAID", "FAILED", "CANCELED", "REFUNDED"]
+    created_at: datetime
+    paid_at: datetime | None = None
+
+
+class AdminPaymentResponse(PaymentHistoryResponse):
+    user_id: int
+    user_name: str
+    user_email: str
+    user_role: Literal["STUDENT", "PROFESSOR", "ADMIN"]
+
+
 class FeatureEntitlementResponse(BaseModel):
     daily_limit: int | None
     used_today: int

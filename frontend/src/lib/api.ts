@@ -77,6 +77,24 @@ export type BillingMe = {
   features: Record<string, FeatureEntitlement>;
 };
 
+export type BillingPayment = {
+  order_id: string;
+  plan_code: string;
+  plan_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'READY' | 'PAID' | 'FAILED' | 'CANCELED' | 'REFUNDED';
+  created_at: string;
+  paid_at?: string | null;
+};
+
+export type AdminBillingPayment = BillingPayment & {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_role: UserRole;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -288,6 +306,9 @@ export const authAPI = {
 export const billingAPI = {
   plans: () => api.get<BillingPlan[]>('/billing/plans'),
   me: () => api.get<BillingMe>('/billing/me'),
+  payments: () => api.get<BillingPayment[]>('/billing/payments'),
+  adminPayments: (status?: BillingPayment['status']) =>
+    api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
   createOrder: (planCode: string) =>
     api.post<BillingOrder>('/billing/orders', { plan_code: planCode }),
   confirm: (data: { payment_key: string; order_id: string; amount: number }) =>
