@@ -11,10 +11,12 @@ from services.billing import (
     _confirmation_key,
     _safe_provider_response,
     _validate_toss_payment,
+    _validate_toss_refund,
     confirm_payment,
     close_unpaid_order,
     create_payment_order,
     recover_payment,
+    refund_payment,
 )
 from services.toss_payments import TossPaymentError, TossPaymentsClient
 
@@ -100,6 +102,22 @@ class TossClientTests(unittest.TestCase):
             client._authorization()
         self.assertEqual(raised.exception.code, "TOSS_NOT_CONFIGURED")
 
+    @patch("services.toss_payments.httpx.post")
+    def test_cancel_uses_reason_and_idempotency_header(self, post):
+        post.return_value.is_error = False
+        post.return_value.json.return_value = {"status": "CANCELED"}
+        client = TossPaymentsClient("test_secret", "https://api.tosspayments.com")
+
+        client.cancel_payment(
+            payment_key="pay_1",
+            cancel_reason="고객 요청",
+            idempotency_key="refund:order:full",
+        )
+
+        self.assertTrue(post.call_args.args[0].endswith("/v1/payments/pay_1/cancel"))
+        self.assertEqual(post.call_args.kwargs["json"], {"cancelReason": "고객 요청"})
+        self.assertEqual(post.call_args.kwargs["headers"]["Idempotency-Key"], "refund:order:full")
+
 
 class PaymentConfirmationTests(unittest.TestCase):
     def test_toss_response_must_match_all_server_order_fields(self):
@@ -137,6 +155,18 @@ class PaymentConfirmationTests(unittest.TestCase):
         )
         self.assertNotIn("card", safe)
         self.assertNotIn("customerEmail", safe)
+
+    def test_refund_response_must_match_server_order(self):
+        valid = {
+            "paymentKey": "pay_1",
+            "orderId": "qb_order1",
+            "totalAmount": 4900,
+            "balanceAmount": 0,
+            "status": "CANCELED",
+        }
+        _validate_toss_refund(valid, payment_key="pay_1", order_id="qb_order1", amount=4900)
+        with self.assertRaises(TossPaymentError):
+            _validate_toss_refund({**valid, "balanceAmount": 4900}, payment_key="pay_1", order_id="qb_order1", amount=4900)
 
     def test_confirmation_activates_subscription_and_marks_order_paid(self):
         order = PaymentOrder(
@@ -274,6 +304,69 @@ class AdminPaymentRecoveryTests(unittest.TestCase):
             close_unpaid_order(db, order_id=order.order_id, now=now)
 
         self.assertEqual(raised.exception.status_code, 409)
+
+
+class AdminRefundTests(unittest.TestCase):
+    def test_full_refund_marks_order_and_reduces_entitlement(self):
+        now = datetime.now(timezone.utc)
+        order = SimpleNamespace(
+            id=10,
+            order_id="qb_paid",
+            user_id=7,
+            plan_id=3,
+            subscription_id=20,
+            amount=4900,
+            currency="KRW",
+            status="PAID",
+        )
+        payment = SimpleNamespace(provider_payment_id="pay_1")
+        subscription = SimpleNamespace(
+            status="ACTIVE",
+            current_period_end=now + timedelta(days=60),
+            canceled_at=None,
+        )
+        plan = SimpleNamespace(entitlement_days=30)
+        db = MagicMock()
+        db.query.side_effect = [
+            query_result(order),
+            query_result(None),
+            query_result(payment),
+            query_result(subscription),
+            query_result(plan),
+        ]
+        added = []
+        db.add.side_effect = added.append
+        toss = MagicMock()
+        toss.cancel_payment.return_value = {
+            "paymentKey": "pay_1",
+            "orderId": "qb_paid",
+            "totalAmount": 4900,
+            "balanceAmount": 0,
+            "status": "CANCELED",
+        }
+
+        result = refund_payment(db, order_id=order.order_id, reason="고객 요청", toss_client=toss)
+
+        self.assertIs(result, order)
+        self.assertEqual(order.status, "REFUNDED")
+        self.assertGreater(subscription.current_period_end, now + timedelta(days=29))
+        self.assertLess(subscription.current_period_end, now + timedelta(days=31))
+        refund = next(value for value in added if isinstance(value, PaymentTransaction))
+        self.assertEqual(refund.transaction_type, "REFUND")
+        self.assertEqual(refund.status, "SUCCEEDED")
+        db.commit.assert_called_once()
+
+    def test_completed_refund_is_idempotent(self):
+        order = SimpleNamespace(order_id="qb_refunded", status="REFUNDED")
+        transaction = SimpleNamespace(status="SUCCEEDED")
+        db = MagicMock()
+        db.query.side_effect = [query_result(order), query_result(transaction)]
+        toss = MagicMock()
+
+        result = refund_payment(db, order_id=order.order_id, reason="재시도", toss_client=toss)
+
+        self.assertIs(result, order)
+        toss.cancel_payment.assert_not_called()
         db.commit.assert_not_called()
 
     @patch("services.billing.confirm_payment")

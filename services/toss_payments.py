@@ -73,6 +73,45 @@ class TossPaymentsClient:
             raise TossPaymentError(502, "INVALID_TOSS_RESPONSE", "잘못된 결제 승인 응답입니다.")
         return data
 
+    def cancel_payment(
+        self,
+        *,
+        payment_key: str,
+        cancel_reason: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        try:
+            response = httpx.post(
+                f"{self.base_url}/v1/payments/{payment_key}/cancel",
+                headers={
+                    "Authorization": self._authorization(),
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": idempotency_key,
+                },
+                json={"cancelReason": cancel_reason},
+                timeout=self.timeout_seconds,
+            )
+        except httpx.RequestError as exc:
+            raise TossPaymentError(
+                503,
+                "TOSS_NETWORK_ERROR",
+                "토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        if response.is_error:
+            raise TossPaymentError(
+                response.status_code,
+                str(data.get("code") or "TOSS_CANCEL_ERROR"),
+                str(data.get("message") or "토스페이먼츠 결제 취소에 실패했습니다."),
+            )
+        if not isinstance(data, dict):
+            raise TossPaymentError(502, "INVALID_TOSS_RESPONSE", "잘못된 결제 취소 응답입니다.")
+        return data
+
 
 def get_toss_client() -> TossPaymentsClient:
     return TossPaymentsClient(

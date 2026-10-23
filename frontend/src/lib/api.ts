@@ -315,6 +315,8 @@ export const billingAPI = {
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/recover`, undefined, { timeout: 30000 }),
+  refundAdminPayment: (orderId: string, reason: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/refund`, { reason }, { timeout: 30000 }),
   createOrder: (planCode: string) =>
     api.post<BillingOrder>('/billing/orders', { plan_code: planCode }),
   confirm: (data: { payment_key: string; order_id: string; amount: number }) =>

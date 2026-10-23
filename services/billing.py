@@ -106,6 +106,24 @@ def _validate_toss_payment(
         )
 
 
+def _validate_toss_refund(
+    payment: dict[str, Any], *, payment_key: str, order_id: str, amount: int
+) -> None:
+    valid = (
+        payment.get("paymentKey") == payment_key
+        and payment.get("orderId") == order_id
+        and payment.get("totalAmount") == amount
+        and payment.get("balanceAmount") == 0
+        and payment.get("status") == "CANCELED"
+    )
+    if not valid:
+        raise TossPaymentError(
+            502,
+            "TOSS_REFUND_MISMATCH",
+            "토스 환불 정보가 서버 주문과 일치하지 않습니다.",
+        )
+
+
 def _activate_subscription(
     db: Session, order: PaymentOrder, plan: BillingPlan, now: datetime
 ) -> UserSubscription:
@@ -341,6 +359,114 @@ def recover_payment(
         amount=order.amount,
         toss_client=toss_client,
     )
+
+
+def refund_payment(
+    db: Session,
+    *,
+    order_id: str,
+    reason: str,
+    toss_client: TossPaymentsClient,
+) -> PaymentOrder:
+    order = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.order_id == order_id)
+        .with_for_update()
+        .first()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="결제 주문을 찾을 수 없습니다.")
+
+    refund_key = f"refund:{order.order_id}:full"
+    existing_refund = db.query(PaymentTransaction).filter(
+        PaymentTransaction.idempotency_key == refund_key
+    ).first()
+    if order.status == "REFUNDED" and existing_refund is not None and existing_refund.status == "SUCCEEDED":
+        return order
+    if order.status != "PAID":
+        raise HTTPException(status_code=409, detail="결제 완료 주문만 환불할 수 있습니다.")
+
+    payment_transaction = (
+        db.query(PaymentTransaction)
+        .filter(
+            PaymentTransaction.payment_order_id == order.id,
+            PaymentTransaction.transaction_type == "PAYMENT",
+            PaymentTransaction.status == "SUCCEEDED",
+            PaymentTransaction.provider_payment_id.is_not(None),
+        )
+        .first()
+    )
+    if payment_transaction is None:
+        raise HTTPException(status_code=409, detail="성공한 결제 거래를 찾을 수 없습니다.")
+
+    refund_transaction = existing_refund or PaymentTransaction(
+        payment_order_id=order.id,
+        provider_payment_id=payment_transaction.provider_payment_id,
+        transaction_type="REFUND",
+        status="PENDING",
+        amount=order.amount,
+        currency=order.currency,
+        idempotency_key=refund_key,
+    )
+    if existing_refund is None:
+        db.add(refund_transaction)
+    else:
+        refund_transaction.status = "PENDING"
+        refund_transaction.failure_code = None
+        refund_transaction.failure_message = None
+
+    try:
+        payment = toss_client.cancel_payment(
+            payment_key=payment_transaction.provider_payment_id,
+            cancel_reason=reason,
+            idempotency_key=refund_key,
+        )
+        _validate_toss_refund(
+            payment,
+            payment_key=payment_transaction.provider_payment_id,
+            order_id=order.order_id,
+            amount=order.amount,
+        )
+    except TossPaymentError as exc:
+        refund_transaction.status = "FAILED"
+        refund_transaction.failure_code = exc.code
+        refund_transaction.failure_message = exc.message[:2000]
+        db.commit()
+        raise HTTPException(
+            status_code=502 if exc.status_code >= 500 else 400,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+    now = datetime.now(timezone.utc)
+    refund_transaction.status = "SUCCEEDED"
+    refund_transaction.provider_response = _safe_provider_response(payment)
+    order.status = "REFUNDED"
+    order.canceled_at = now
+    order.failure_code = None
+    order.failure_message = None
+
+    if order.subscription_id is not None:
+        subscription = (
+            db.query(UserSubscription)
+            .filter(UserSubscription.id == order.subscription_id)
+            .with_for_update()
+            .first()
+        )
+        plan = db.query(BillingPlan).filter(BillingPlan.id == order.plan_id).first()
+        if subscription is not None and plan is not None and subscription.status == "ACTIVE":
+            period_end = subscription.current_period_end
+            if period_end is not None and period_end.tzinfo is None:
+                period_end = period_end.replace(tzinfo=timezone.utc)
+            reduced_end = (period_end or now) - timedelta(days=plan.entitlement_days)
+            if reduced_end <= now:
+                subscription.status = "CANCELED"
+                subscription.canceled_at = now
+            else:
+                subscription.current_period_end = reduced_end
+
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 def order_response(order: PaymentOrder) -> dict[str, Any]:

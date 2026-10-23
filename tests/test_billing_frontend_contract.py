@@ -67,6 +67,8 @@ class BillingFrontendContractTests(unittest.TestCase):
         self.assertIn("결제 상태 확인 및 복구", page)
         self.assertIn("payment.can_close", page)
         self.assertIn("payment.can_recover", page)
+        self.assertIn("전액 환불", page)
+        self.assertIn("billingAPI.refundAdminPayment", page)
 
 
 if __name__ == "__main__":

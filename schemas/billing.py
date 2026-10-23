@@ -83,8 +83,12 @@ class AdminPaymentResponse(PaymentHistoryResponse):
 
 class AdminPaymentActionResponse(BaseModel):
     order_id: str
-    status: Literal["PAID", "CANCELED"]
+    status: Literal["PAID", "CANCELED", "REFUNDED"]
     message: str
+
+
+class AdminRefundRequest(BaseModel):
+    reason: str = Field(min_length=2, max_length=200)
 
 
 class FeatureEntitlementResponse(BaseModel):

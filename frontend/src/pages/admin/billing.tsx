@@ -72,6 +72,25 @@ export default function AdminBillingPage() {
     }
   };
 
+  const refundPayment = async (payment: AdminBillingPayment) => {
+    const reason = window.prompt('전액 환불 사유를 입력해 주세요. 이용 기간에서 해당 주문의 기간이 차감됩니다.');
+    if (!reason?.trim()) return;
+    if (!window.confirm(`${payment.amount.toLocaleString('ko-KR')}원을 전액 환불할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    setProcessingOrderId(payment.order_id);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await billingAPI.refundAdminPayment(payment.order_id, reason.trim());
+      setNotice(data.message ?? '전액 환불을 완료했습니다.');
+      await loadPayments();
+    } catch (caught: any) {
+      const detail = caught.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? '환불을 처리하지 못했습니다.');
+    } finally {
+      setProcessingOrderId('');
+    }
+  };
+
   const paidTotal = useMemo(
     () => payments.filter((payment) => payment.status === 'PAID').reduce((sum, payment) => sum + payment.amount, 0),
     [payments],
@@ -130,6 +149,14 @@ export default function AdminBillingPage() {
                             onClick={() => void recoverPayment(payment)}
                           >결제 상태 확인 및 복구</button>
                         </div>
+                      )}
+                      {payment.status === 'PAID' && (
+                        <button
+                          type="button"
+                          className="mt-2 text-xs font-semibold text-red-700 underline disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={processingOrderId === payment.order_id}
+                          onClick={() => void refundPayment(payment)}
+                        >전액 환불</button>
                       )}
                     </td>
                   </tr>

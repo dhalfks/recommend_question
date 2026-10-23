@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from models import BillingPlan, PaymentOrder, PaymentTransaction, User, UserRole, get_db
 from schemas.billing import (
     AdminPaymentActionResponse,
+    AdminRefundRequest,
     AdminPaymentResponse,
     BillingPlanResponse,
     BillingMeResponse,
@@ -21,6 +22,7 @@ from services.billing import (
     create_payment_order,
     order_response,
     recover_payment,
+    refund_payment,
     subscription_response,
 )
 from services.auth import get_current_user, require_roles
@@ -182,3 +184,20 @@ def recover_admin_payment(
 ):
     order, _, _ = recover_payment(db, order_id=order_id, toss_client=toss_client)
     return {"order_id": order.order_id, "status": order.status, "message": "결제를 확인하고 복구했습니다."}
+
+
+@router.post("/admin/payments/{order_id}/refund", response_model=AdminPaymentActionResponse)
+def refund_admin_payment(
+    order_id: str,
+    payload: AdminRefundRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    order = refund_payment(
+        db,
+        order_id=order_id,
+        reason=payload.reason.strip(),
+        toss_client=toss_client,
+    )
+    return {"order_id": order.order_id, "status": order.status, "message": "전액 환불을 완료했습니다."}
