@@ -42,3 +42,5 @@
 `20261023_add_billing_tables_rollback.sql`은 6개 신규 테이블을 모두 삭제합니다. 결제 또는 AI 사용 기록이 한 건이라도 생성된 환경에서는 감사 데이터 보존 계획 없이 실행하면 안 됩니다.
 
 `20261023_add_billing_customers.sql`은 토스페이먼츠가 요구하는 회원별 무작위 `customerKey`를 기존 `users` 테이블 변경 없이 저장하는 `billing_customers` 테이블을 추가합니다. 결제 화면을 배포하기 전에 이 마이그레이션을 먼저 적용해야 합니다.
+
+결제 웹훅 등록 및 검증 절차는 `docs/TOSS_WEBHOOK_SETUP.md`를 따릅니다. 웹훅 이벤트는 기존 `payment_webhook_events` 테이블에 기록되므로 추가 SQL은 필요하지 않습니다.

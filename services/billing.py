@@ -472,6 +472,67 @@ def refund_payment(
     return order
 
 
+def reconcile_paid_payment(
+    db: Session, *, order_id: str, payment: dict[str, Any]
+) -> PaymentOrder:
+    """Recover a Toss-approved payment after a lost browser/API response."""
+    order = (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.order_id == order_id)
+        .with_for_update()
+        .first()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="결제 주문을 찾을 수 없습니다.")
+    payment_key = str(payment.get("paymentKey") or "")
+    _validate_toss_payment(
+        payment,
+        payment_key=payment_key,
+        order_id=order.order_id,
+        amount=order.amount,
+    )
+    if order.status == "PAID":
+        return order
+    if order.status != "READY":
+        raise HTTPException(status_code=409, detail="복구할 수 없는 주문 상태입니다.")
+
+    plan = db.query(BillingPlan).filter(BillingPlan.id == order.plan_id).first()
+    if plan is None:
+        raise HTTPException(status_code=409, detail="주문 상품을 찾을 수 없습니다.")
+    idempotency_key = _confirmation_key(order.order_id, payment_key)
+    transaction = db.query(PaymentTransaction).filter(
+        PaymentTransaction.idempotency_key == idempotency_key
+    ).first()
+    if transaction is None:
+        transaction = PaymentTransaction(
+            payment_order_id=order.id,
+            provider_payment_id=payment_key,
+            transaction_type="PAYMENT",
+            status="SUCCEEDED",
+            amount=order.amount,
+            currency=order.currency,
+            idempotency_key=idempotency_key,
+        )
+        db.add(transaction)
+    else:
+        transaction.provider_payment_id = payment_key
+        transaction.status = "SUCCEEDED"
+        transaction.failure_code = None
+        transaction.failure_message = None
+    transaction.provider_response = _safe_provider_response(payment)
+
+    now = datetime.now(timezone.utc)
+    subscription = _activate_subscription(db, order, plan, now)
+    order.subscription_id = subscription.id
+    order.status = "PAID"
+    order.paid_at = now
+    order.failure_code = None
+    order.failure_message = None
+    db.commit()
+    db.refresh(order)
+    return order
+
+
 def order_response(order: PaymentOrder) -> dict[str, Any]:
     billing_customer = getattr(order, "billing_customer", None)
     return {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Literal
 from datetime import datetime, timedelta, timezone
@@ -18,6 +18,7 @@ from schemas.billing import (
     PaymentHistoryResponse,
     PaymentOrderCreate,
     PaymentOrderResponse,
+    PaymentWebhookResponse,
 )
 from services.billing import (
     close_unpaid_order,
@@ -38,9 +39,33 @@ from services.refund_requests import (
     list_refund_requests,
     refund_request_response,
 )
+from services.payment_webhooks import process_toss_payment_webhook
+from services.toss_payments import TossPaymentError
 
 
 router = APIRouter()
+
+
+@router.post("/webhooks/toss", response_model=PaymentWebhookResponse)
+def receive_toss_payment_webhook(
+    payload: dict,
+    transmission_id: str | None = Header(default=None, alias="tosspayments-webhook-transmission-id"),
+    db: Session = Depends(get_db),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    try:
+        event, duplicate = process_toss_payment_webhook(
+            db,
+            payload=payload,
+            transmission_id=transmission_id,
+            toss_client=toss_client,
+        )
+    except TossPaymentError as exc:
+        raise HTTPException(
+            status_code=503 if exc.status_code >= 500 else 400,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    return {"event_id": event.event_id, "status": event.status, "duplicate": duplicate}
 
 
 @router.get("/plans", response_model=list[BillingPlanResponse])

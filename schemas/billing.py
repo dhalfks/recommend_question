@@ -136,3 +136,9 @@ class BillingMeResponse(BaseModel):
     plan_name: str
     subscription: SubscriptionResponse | None = None
     features: dict[str, FeatureEntitlementResponse]
+
+
+class PaymentWebhookResponse(BaseModel):
+    event_id: str
+    status: Literal["PROCESSED", "FAILED"]
+    duplicate: bool

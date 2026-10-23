@@ -112,6 +112,34 @@ class TossPaymentsClient:
             raise TossPaymentError(502, "INVALID_TOSS_RESPONSE", "잘못된 결제 취소 응답입니다.")
         return data
 
+    def get_payment_by_order_id(self, *, order_id: str) -> dict[str, Any]:
+        try:
+            response = httpx.get(
+                f"{self.base_url}/v1/payments/orders/{order_id}",
+                headers={"Authorization": self._authorization()},
+                timeout=self.timeout_seconds,
+            )
+        except httpx.RequestError as exc:
+            raise TossPaymentError(
+                503,
+                "TOSS_NETWORK_ERROR",
+                "토스페이먼츠 결제 상태를 조회하지 못했습니다.",
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        if response.is_error:
+            raise TossPaymentError(
+                response.status_code,
+                str(data.get("code") or "TOSS_QUERY_ERROR"),
+                str(data.get("message") or "토스페이먼츠 결제 조회에 실패했습니다."),
+            )
+        if not isinstance(data, dict):
+            raise TossPaymentError(502, "INVALID_TOSS_RESPONSE", "잘못된 결제 조회 응답입니다.")
+        return data
+
 
 def get_toss_client() -> TossPaymentsClient:
     return TossPaymentsClient(
