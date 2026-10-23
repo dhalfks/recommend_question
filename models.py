@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, CheckConstraint, Index, UniqueConstraint, func
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, CheckConstraint, Index, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -63,6 +63,25 @@ class User(Base):
 
 class BillingPlan(Base):
     __tablename__ = "billing_plans"
+    __table_args__ = (
+        CheckConstraint("BTRIM(code) <> ''", name="billing_plans_code_not_blank"),
+        CheckConstraint(
+            "audience_role IN ('STUDENT', 'PROFESSOR')",
+            name="billing_plans_audience_role_valid",
+        ),
+        CheckConstraint("price > 0", name="billing_plans_price_positive"),
+        CheckConstraint("currency = 'KRW'", name="billing_plans_currency_valid"),
+        CheckConstraint(
+            "billing_period IN ('ONE_TIME', 'MONTHLY')",
+            name="billing_plans_period_valid",
+        ),
+        CheckConstraint(
+            "entitlement_days > 0", name="billing_plans_entitlement_days_positive"
+        ),
+        CheckConstraint(
+            "jsonb_typeof(features) = 'object'", name="billing_plans_features_object"
+        ),
+    )
 
     id = Column(BigInteger, primary_key=True)
     code = Column(String(50), nullable=False, unique=True)
@@ -80,6 +99,30 @@ class BillingPlan(Base):
 
 class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED')",
+            name="user_subscriptions_status_valid",
+        ),
+        CheckConstraint(
+            "current_period_end IS NULL OR current_period_start IS NULL "
+            "OR current_period_end > current_period_start",
+            name="user_subscriptions_period_valid",
+        ),
+        Index(
+            "uq_user_subscriptions_active_plan",
+            "user_id",
+            "plan_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+        Index(
+            "idx_user_subscriptions_user_status_end",
+            "user_id",
+            "status",
+            text("current_period_end DESC"),
+        ),
+    )
 
     id = Column(BigInteger, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
@@ -101,6 +144,17 @@ class UserSubscription(Base):
 
 class PaymentOrder(Base):
     __tablename__ = "payment_orders"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="payment_orders_amount_positive"),
+        CheckConstraint("currency = 'KRW'", name="payment_orders_currency_valid"),
+        CheckConstraint(
+            "status IN ('READY', 'PAID', 'FAILED', 'CANCELED', 'REFUNDED')",
+            name="payment_orders_status_valid",
+        ),
+        CheckConstraint("provider = 'TOSS'", name="payment_orders_provider_valid"),
+        Index("idx_payment_orders_user_created", "user_id", text("created_at DESC")),
+        Index("idx_payment_orders_status_created", "status", "created_at"),
+    )
 
     id = Column(BigInteger, primary_key=True)
     order_id = Column(String(100), nullable=False, unique=True)
@@ -133,6 +187,36 @@ class PaymentOrder(Base):
 
 class PaymentTransaction(Base):
     __tablename__ = "payment_transactions"
+    __table_args__ = (
+        CheckConstraint(
+            "transaction_type IN ('PAYMENT', 'REFUND')",
+            name="payment_transactions_type_valid",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'SUCCEEDED', 'FAILED')",
+            name="payment_transactions_status_valid",
+        ),
+        CheckConstraint("amount > 0", name="payment_transactions_amount_positive"),
+        CheckConstraint("currency = 'KRW'", name="payment_transactions_currency_valid"),
+        CheckConstraint(
+            "provider_response IS NULL OR jsonb_typeof(provider_response) = 'object'",
+            name="payment_transactions_provider_response_object",
+        ),
+        Index(
+            "uq_payment_transactions_provider_payment_success",
+            "provider_payment_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text(
+                "provider_payment_id IS NOT NULL AND status = 'SUCCEEDED'"
+            ),
+        ),
+        Index(
+            "idx_payment_transactions_order_created",
+            "payment_order_id",
+            "created_at",
+        ),
+    )
 
     id = Column(BigInteger, primary_key=True)
     payment_order_id = Column(
@@ -154,6 +238,30 @@ class PaymentTransaction(Base):
 
 class AIUsageEvent(Base):
     __tablename__ = "ai_usage_events"
+    __table_args__ = (
+        CheckConstraint(
+            "feature_code IN ('AI_EXPLANATION', 'CODE_REVIEW', 'QUESTION_GENERATION')",
+            name="ai_usage_events_feature_valid",
+        ),
+        CheckConstraint(
+            "status IN ('STARTED', 'SUCCEEDED', 'FAILED')",
+            name="ai_usage_events_status_valid",
+        ),
+        CheckConstraint(
+            "input_tokens IS NULL OR input_tokens >= 0",
+            name="ai_usage_events_input_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "output_tokens IS NULL OR output_tokens >= 0",
+            name="ai_usage_events_output_tokens_nonnegative",
+        ),
+        Index(
+            "idx_ai_usage_events_user_feature_created",
+            "user_id",
+            "feature_code",
+            text("created_at DESC"),
+        ),
+    )
 
     id = Column(BigInteger, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
@@ -177,6 +285,22 @@ class AIUsageEvent(Base):
 
 class PaymentWebhookEvent(Base):
     __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "event_id", name="uq_payment_webhook_provider_event"
+        ),
+        CheckConstraint("provider = 'TOSS'", name="payment_webhook_provider_valid"),
+        CheckConstraint(
+            "status IN ('RECEIVED', 'PROCESSED', 'FAILED')",
+            name="payment_webhook_status_valid",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(payload) = 'object'", name="payment_webhook_payload_object"
+        ),
+        Index(
+            "idx_payment_webhook_events_status_received", "status", "received_at"
+        ),
+    )
 
     id = Column(BigInteger, primary_key=True)
     provider = Column(String(20), nullable=False, server_default="TOSS")

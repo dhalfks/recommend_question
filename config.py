@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     OPENAI_GRADING_MODEL: str = "gpt-5.6-luna"
     OPENAI_GRADING_REVIEW_MODEL: str = "gpt-5.6-sol"
     OPENAI_GRADING_CONFIDENCE_THRESHOLD: float = 0.75
+
+    # Toss Payments (server-side secret only)
+    TOSS_SECRET_KEY: str = ""
+    TOSS_API_BASE_URL: str = "https://api.tosspayments.com"
+    TOSS_API_TIMEOUT_SECONDS: float = 15.0
     
     # Server
     SERVER_HOST: str = "0.0.0.0"
