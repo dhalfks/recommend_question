@@ -97,6 +97,29 @@ class BillingPlan(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class BillingCustomer(Base):
+    __tablename__ = "billing_customers"
+    __table_args__ = (
+        CheckConstraint(
+            "CHAR_LENGTH(customer_key) BETWEEN 10 AND 50",
+            name="billing_customers_key_length",
+        ),
+        CheckConstraint(
+            "customer_key ~ '^[A-Za-z0-9._=@-]+$'",
+            name="billing_customers_key_format",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    customer_key = Column(String(50), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
 class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
     __table_args__ = (

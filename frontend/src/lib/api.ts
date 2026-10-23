@@ -31,6 +31,52 @@ export type AuthUser = {
   professor_id?: number | null;
 };
 
+export type BillingPlan = {
+  id: number;
+  code: 'STUDENT_PRO' | 'TEACHER_PRO';
+  name: string;
+  audience_role: 'STUDENT' | 'PROFESSOR';
+  price: number;
+  currency: 'KRW';
+  billing_period: 'ONE_TIME' | 'MONTHLY';
+  entitlement_days: number;
+  features: Record<string, { daily_limit: number }>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BillingOrder = {
+  order_id: string;
+  order_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'READY' | 'PAID' | 'FAILED' | 'CANCELED' | 'REFUNDED';
+  created_at: string;
+  customer_key?: string | null;
+};
+
+export type FeatureEntitlement = {
+  daily_limit: number | null;
+  used_today: number;
+  remaining_today: number | null;
+  is_available: boolean;
+};
+
+export type BillingMe = {
+  plan_code: string;
+  plan_name: string;
+  subscription?: {
+    id: number;
+    plan_code: string;
+    plan_name: string;
+    status: 'ACTIVE';
+    current_period_start: string;
+    current_period_end: string;
+  } | null;
+  features: Record<string, FeatureEntitlement>;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -237,6 +283,15 @@ export const authAPI = {
     academic_year?: number;
     course_name?: string;
   }) => api.put('/auth/me', data),
+};
+
+export const billingAPI = {
+  plans: () => api.get<BillingPlan[]>('/billing/plans'),
+  me: () => api.get<BillingMe>('/billing/me'),
+  createOrder: (planCode: string) =>
+    api.post<BillingOrder>('/billing/orders', { plan_code: planCode }),
+  confirm: (data: { payment_key: string; order_id: string; amount: number }) =>
+    api.post('/billing/payments/confirm', data, { timeout: 30000 }),
 };
 
 // 과목 API

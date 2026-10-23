@@ -36,6 +36,7 @@ class PaymentOrderResponse(BaseModel):
     currency: Literal["KRW"]
     status: Literal["READY", "PAID", "FAILED", "CANCELED", "REFUNDED"]
     created_at: datetime
+    customer_key: str | None = None
 
 
 class PaymentConfirmRequest(BaseModel):

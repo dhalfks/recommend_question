@@ -4,6 +4,7 @@ import Footer from '@/components/Footer';
 import ProtectedPage from '@/components/ProtectedPage';
 import { useAuth } from '@/contexts/AuthContext';
 import { authAPI } from '@/lib/api';
+import BillingSummary from '@/components/BillingSummary';
 
 const roleLabels = {
   STUDENT: '학생',
@@ -87,6 +88,8 @@ export default function ProfilePage() {
         <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-12">
           <h1 className="text-4xl font-bold text-[#242C34]">회원정보 수정</h1>
           <p className="mt-3 text-[#6C757D]">내 기본 정보와 비밀번호를 관리합니다.</p>
+
+          <BillingSummary />
 
           <form onSubmit={submit} className="surface-card mt-8 space-y-6 p-8">
             <div className="rounded-xl bg-[#F8F9FA] p-4">

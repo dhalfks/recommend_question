@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 
-from models import BillingPlan, PaymentOrder, PaymentTransaction, UserRole, UserSubscription
+from models import BillingCustomer, BillingPlan, PaymentOrder, PaymentTransaction, UserRole, UserSubscription
 from services.billing import (
     _confirmation_key,
     _safe_provider_response,
@@ -34,10 +34,14 @@ class PaymentOrderTests(unittest.TestCase):
             price=4900,
             currency="KRW",
         )
-        db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = plan
-        db.refresh.side_effect = lambda order: setattr(order, "created_at", MagicMock())
         user = SimpleNamespace(id=7, role=UserRole.STUDENT)
+        db = MagicMock()
+        plan_query = query_result(plan)
+        user_query = query_result(None)
+        user_query.one.return_value = user
+        customer_query = query_result(None)
+        db.query.side_effect = [plan_query, user_query, customer_query]
+        db.refresh.side_effect = lambda order: setattr(order, "created_at", MagicMock())
 
         order = create_payment_order(db, user, "student_pro")
 
@@ -46,6 +50,11 @@ class PaymentOrderTests(unittest.TestCase):
         self.assertEqual(order.user_id, 7)
         self.assertTrue(order.order_id.startswith("qb_"))
         self.assertLessEqual(len(order.order_id), 64)
+        customer = next(
+            value for value in [call.args[0] for call in db.add.call_args_list]
+            if isinstance(value, BillingCustomer)
+        )
+        self.assertEqual(len(customer.customer_key), 36)
         db.commit.assert_called_once()
 
     def test_role_mismatch_is_rejected(self):

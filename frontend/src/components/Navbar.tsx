@@ -39,6 +39,9 @@ export default function Navbar() {
           )}
           {user && (
             <>
+              {user.role !== 'ADMIN' && (
+                <Link href="/pricing" className="rounded-lg px-3 py-2 hover:bg-white/10">요금제</Link>
+              )}
               <Link href="/profile" className="hidden rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 sm:inline">
                 {user.name} · {roleLabel[user.role]}
               </Link>

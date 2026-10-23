@@ -39,3 +39,5 @@
 적용 전에는 `docs/readonly_schema_inspection.sql`로 대상 DB의 `users.id`가 `INTEGER`인지 확인해야 합니다. Neon 테스트 브랜치에 먼저 적용하고 신규 테이블, 제약조건, 초기 상품을 검증한 뒤 운영 환경에 적용합니다.
 
 `20261023_add_billing_tables_rollback.sql`은 6개 신규 테이블을 모두 삭제합니다. 결제 또는 AI 사용 기록이 한 건이라도 생성된 환경에서는 감사 데이터 보존 계획 없이 실행하면 안 됩니다.
+
+`20261023_add_billing_customers.sql`은 토스페이먼츠가 요구하는 회원별 무작위 `customerKey`를 기존 `users` 테이블 변경 없이 저장하는 `billing_customers` 테이블을 추가합니다. 결제 화면을 배포하기 전에 이 마이그레이션을 먼저 적용해야 합니다.

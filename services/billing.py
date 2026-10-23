@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from models import (
     BillingPlan,
+    BillingCustomer,
     PaymentOrder,
     PaymentTransaction,
     User,
@@ -33,6 +34,18 @@ def create_payment_order(db: Session, user: User, plan_code: str) -> PaymentOrde
     if _role_value(user) != plan.audience_role:
         raise HTTPException(status_code=403, detail="현재 계정 역할로 구매할 수 없는 상품입니다.")
 
+    # Serialize first customer-key creation for the same user.
+    db.query(User).filter(User.id == user.id).with_for_update().one()
+    billing_customer = (
+        db.query(BillingCustomer).filter(BillingCustomer.user_id == user.id).first()
+    )
+    if billing_customer is None:
+        billing_customer = BillingCustomer(
+            user_id=user.id,
+            customer_key=str(uuid.uuid4()),
+        )
+        db.add(billing_customer)
+
     order = PaymentOrder(
         order_id=f"qb_{uuid.uuid4().hex}",
         user_id=user.id,
@@ -44,6 +57,7 @@ def create_payment_order(db: Session, user: User, plan_code: str) -> PaymentOrde
         status="READY",
         provider="TOSS",
     )
+    order.billing_customer = billing_customer
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -234,6 +248,7 @@ def confirm_payment(
 
 
 def order_response(order: PaymentOrder) -> dict[str, Any]:
+    billing_customer = getattr(order, "billing_customer", None)
     return {
         "order_id": order.order_id,
         "order_name": order.plan_name,
@@ -241,6 +256,7 @@ def order_response(order: PaymentOrder) -> dict[str, Any]:
         "currency": order.currency,
         "status": order.status,
         "created_at": order.created_at,
+        "customer_key": billing_customer.customer_key if billing_customer else None,
     }
 
 
