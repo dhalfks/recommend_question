@@ -58,3 +58,17 @@ class SubscriptionResponse(BaseModel):
 class PaymentConfirmResponse(BaseModel):
     order: PaymentOrderResponse
     subscription: SubscriptionResponse
+
+
+class FeatureEntitlementResponse(BaseModel):
+    daily_limit: int | None
+    used_today: int
+    remaining_today: int | None
+    is_available: bool
+
+
+class BillingMeResponse(BaseModel):
+    plan_code: str
+    plan_name: str
+    subscription: SubscriptionResponse | None = None
+    features: dict[str, FeatureEntitlementResponse]

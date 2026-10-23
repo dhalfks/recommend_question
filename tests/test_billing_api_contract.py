@@ -68,6 +68,7 @@ class BillingRouteTests(unittest.TestCase):
     def test_route_requires_authentication_and_is_registered(self):
         self.assertIn("Depends(get_current_user)", ROUTE)
         self.assertIn('prefix="/api/billing"', MAIN)
+        self.assertIn('@router.get("/me", response_model=BillingMeResponse)', ROUTE)
 
 
 if __name__ == "__main__":

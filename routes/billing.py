@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from models import BillingPlan, User, UserRole, get_db
 from schemas.billing import (
     BillingPlanResponse,
+    BillingMeResponse,
     PaymentConfirmRequest,
     PaymentConfirmResponse,
     PaymentOrderCreate,
@@ -17,6 +18,7 @@ from services.billing import (
 )
 from services.auth import get_current_user
 from services.toss_payments import TossPaymentsClient, get_toss_client
+from services.entitlements import get_entitlement_snapshot
 
 
 router = APIRouter()
@@ -62,3 +64,11 @@ def confirm_billing_payment(
         "order": order_response(order),
         "subscription": subscription_response(subscription, plan),
     }
+
+
+@router.get("/me", response_model=BillingMeResponse)
+def get_my_billing(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_entitlement_snapshot(db, current_user)
