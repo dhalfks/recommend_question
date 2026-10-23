@@ -44,6 +44,13 @@ class BillingFrontendContractTests(unittest.TestCase):
         self.assertNotIn("api.tosspayments.com", SUCCESS)
         self.assertIn("payment_key: paymentKey", SUCCESS)
 
+    def test_success_retries_ambiguous_network_failures_and_checks_saved_order(self):
+        self.assertIn("attempt < 3", SUCCESS)
+        self.assertIn("error.response.status >= 500", SUCCESS)
+        self.assertIn("billingAPI.payments()", SUCCESS)
+        self.assertIn("payment.status === 'PAID'", SUCCESS)
+        self.assertIn("결제 확인 지연", SUCCESS)
+
     def test_failure_does_not_confirm_payment(self):
         self.assertNotIn("billingAPI.confirm", FAIL)
         self.assertIn("PAY_PROCESS_CANCELED", FAIL)

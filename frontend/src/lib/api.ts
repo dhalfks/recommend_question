@@ -101,6 +101,26 @@ export type AdminBillingPayment = BillingPayment & {
   refund_policy_message: string;
 };
 
+export type RefundRequest = {
+  id: number;
+  order_id: string;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  plan_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  standard_full_refund: boolean;
+  requires_manual_review: boolean;
+  paid_feature_usage_count: number;
+  policy_message: string;
+  decision_reason?: string | null;
+  requested_at: string;
+  reviewed_at?: string | null;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -313,6 +333,14 @@ export const billingAPI = {
   plans: () => api.get<BillingPlan[]>('/billing/plans'),
   me: () => api.get<BillingMe>('/billing/me'),
   payments: () => api.get<BillingPayment[]>('/billing/payments'),
+  refundRequests: () => api.get<RefundRequest[]>('/billing/refund-requests'),
+  requestRefund: (orderId: string, reason: string) =>
+    api.post<RefundRequest>('/billing/refund-requests', { order_id: orderId, reason }),
+  adminRefundRequests: () => api.get<RefundRequest[]>('/billing/admin/refund-requests'),
+  approveRefundRequest: (requestId: number, reason: string) =>
+    api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/approve`, { reason }, { timeout: 30000 }),
+  rejectRefundRequest: (requestId: number, reason: string) =>
+    api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/reject`, { reason }),
   adminPayments: (status?: BillingPayment['status']) =>
     api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
   closeAdminPayment: (orderId: string) =>

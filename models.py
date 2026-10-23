@@ -259,6 +259,53 @@ class PaymentTransaction(Base):
     order = relationship("PaymentOrder", foreign_keys=[payment_order_id])
 
 
+class RefundRequest(Base):
+    __tablename__ = "refund_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="refund_requests_status_valid",
+        ),
+        CheckConstraint("BTRIM(reason) <> ''", name="refund_requests_reason_not_blank"),
+        CheckConstraint(
+            "jsonb_typeof(eligibility_snapshot) = 'object'",
+            name="refund_requests_snapshot_object",
+        ),
+        Index(
+            "uq_refund_requests_pending_order",
+            "order_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        Index("idx_refund_requests_user_requested", "user_id", text("requested_at DESC")),
+        Index("idx_refund_requests_status_requested", "status", "requested_at"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    order_id = Column(
+        BigInteger, ForeignKey("payment_orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    status = Column(String(20), nullable=False, server_default="PENDING")
+    reason = Column(Text, nullable=False)
+    eligibility_snapshot = Column(JSONB, nullable=False)
+    decision_reason = Column(Text, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    refund_transaction_id = Column(
+        BigInteger,
+        ForeignKey("payment_transactions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    requested_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order = relationship("PaymentOrder", foreign_keys=[order_id])
+    user = relationship("User", foreign_keys=[user_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    refund_transaction = relationship("PaymentTransaction", foreign_keys=[refund_transaction_id])
+
+
 class AIUsageEvent(Base):
     __tablename__ = "ai_usage_events"
     __table_args__ = (

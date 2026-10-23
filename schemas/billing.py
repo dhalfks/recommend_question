@@ -95,6 +95,35 @@ class AdminRefundRequest(BaseModel):
     reason: str = Field(min_length=2, max_length=200)
 
 
+class RefundRequestCreate(BaseModel):
+    order_id: str = Field(min_length=6, max_length=100)
+    reason: str = Field(min_length=2, max_length=1000)
+
+
+class RefundDecisionRequest(BaseModel):
+    reason: str = Field(min_length=2, max_length=1000)
+
+
+class RefundRequestResponse(BaseModel):
+    id: int
+    order_id: str
+    user_id: int
+    user_name: str
+    user_email: str
+    plan_name: str
+    amount: int
+    currency: Literal["KRW"]
+    status: Literal["PENDING", "APPROVED", "REJECTED"]
+    reason: str
+    standard_full_refund: bool
+    requires_manual_review: bool
+    paid_feature_usage_count: int
+    policy_message: str
+    decision_reason: str | None = None
+    requested_at: datetime
+    reviewed_at: datetime | None = None
+
+
 class FeatureEntitlementResponse(BaseModel):
     daily_limit: int | None
     used_today: int

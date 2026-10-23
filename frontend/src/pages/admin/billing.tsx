@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import ProtectedPage from '@/components/ProtectedPage';
-import { AdminBillingPayment, BillingPayment, billingAPI } from '@/lib/api';
+import { AdminBillingPayment, BillingPayment, RefundRequest, billingAPI } from '@/lib/api';
 
 const statuses: Array<{ value: '' | BillingPayment['status']; label: string }> = [
   { value: '', label: '전체' },
@@ -20,6 +20,7 @@ const statusLabel = Object.fromEntries(
 export default function AdminBillingPage() {
   const [status, setStatus] = useState<'' | BillingPayment['status']>('');
   const [payments, setPayments] = useState<AdminBillingPayment[]>([]);
+  const [refundRequests, setRefundRequests] = useState<RefundRequest[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,28 @@ export default function AdminBillingPage() {
   useEffect(() => {
     void loadPayments();
   }, [status]);
+
+  const loadRefundRequests = () => billingAPI.adminRefundRequests()
+    .then(({ data }) => setRefundRequests(data))
+    .catch(() => setError('환불 신청 목록을 불러오지 못했습니다.'));
+
+  useEffect(() => { void loadRefundRequests(); }, []);
+
+  const decideRefund = async (request: RefundRequest, approved: boolean) => {
+    const reason = window.prompt(approved ? '승인 사유를 입력해 주세요.' : '반려 사유를 입력해 주세요.');
+    if (!reason?.trim() || reason.trim().length < 2) return;
+    if (approved && !window.confirm(`${request.amount.toLocaleString('ko-KR')}원을 토스에서 전액 환불할까요?`)) return;
+    setProcessingOrderId(request.order_id); setError(''); setNotice('');
+    try {
+      if (approved) await billingAPI.approveRefundRequest(request.id, reason.trim());
+      else await billingAPI.rejectRefundRequest(request.id, reason.trim());
+      setNotice(approved ? '환불을 승인하고 결제를 취소했습니다.' : '환불 신청을 반려했습니다.');
+      await Promise.all([loadPayments(), loadRefundRequests()]);
+    } catch (caught: any) {
+      const detail = caught.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? '환불 신청을 처리하지 못했습니다.');
+    } finally { setProcessingOrderId(''); }
+  };
 
   const closeUnpaidOrder = async (payment: AdminBillingPayment) => {
     if (!window.confirm('PG 결제키가 없는 장시간 미완료 주문을 종료할까요? 종료 후에는 결제할 수 없습니다.')) return;
@@ -119,6 +142,17 @@ export default function AdminBillingPage() {
 
           {error && <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
           {notice && <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-800">{notice}</div>}
+          <section className="surface-card mt-6 p-6">
+            <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-bold text-[#242C34]">환불 신청 관리</h2><span className="text-sm text-[#6C757D]">대기 {refundRequests.filter((item) => item.status === 'PENDING').length}건</span></div>
+            {refundRequests.length === 0 ? <p className="mt-4 text-[#6C757D]">환불 신청이 없습니다.</p> : <div className="mt-4 divide-y divide-[#E9ECEF]">{refundRequests.map((request) => (
+              <div key={request.id} className="grid gap-3 py-4 lg:grid-cols-[1.2fr_1fr_2fr_auto] lg:items-center">
+                <div><p className="font-semibold">{request.user_name} · {request.plan_name}</p><p className="text-xs text-[#6C757D]">{request.user_email}</p></div>
+                <div><p className="font-semibold">{request.amount.toLocaleString('ko-KR')}원</p><p className="text-xs text-[#6C757D]">{new Date(request.requested_at).toLocaleString('ko-KR')}</p></div>
+                <div><p className="text-sm">{request.reason}</p><p className={`mt-1 text-xs ${request.standard_full_refund ? 'text-green-700' : 'text-amber-700'}`}>{request.policy_message}</p>{request.decision_reason && <p className="mt-1 text-xs text-[#6C757D]">처리 사유: {request.decision_reason}</p>}</div>
+                <div className="flex gap-2 lg:justify-end">{request.status === 'PENDING' ? <><button type="button" className="text-sm font-semibold text-[#3B86D1] underline disabled:opacity-40" disabled={processingOrderId === request.order_id} onClick={() => void decideRefund(request, true)}>승인</button><button type="button" className="text-sm font-semibold text-red-700 underline disabled:opacity-40" disabled={processingOrderId === request.order_id} onClick={() => void decideRefund(request, false)}>반려</button></> : <span className="text-sm font-semibold">{request.status === 'APPROVED' ? '승인 완료' : '반려 완료'}</span>}</div>
+              </div>
+            ))}</div>}
+          </section>
           <section className="surface-card mt-6 overflow-x-auto p-6">
             {loading ? <p>불러오는 중...</p> : payments.length === 0 ? <p className="text-[#6C757D]">표시할 주문이 없습니다.</p> : (
               <table className="w-full min-w-[850px] text-left text-sm">

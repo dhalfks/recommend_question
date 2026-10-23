@@ -33,6 +33,7 @@
 - `payment_transactions`
 - `ai_usage_events`
 - `payment_webhook_events`
+- `refund_requests` (`20261023_add_refund_requests.sql`)
 
 초기 상품으로 학생 Pro 및 교수자 Pro 30일 단건 이용권을 추가합니다. 가격과 기능 한도는 서버가 이 테이블에서 조회하며, 클라이언트가 보낸 금액을 신뢰하지 않습니다.
 

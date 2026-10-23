@@ -8,6 +8,9 @@ from schemas.billing import (
     AdminPaymentActionResponse,
     AdminRefundRequest,
     AdminPaymentResponse,
+    RefundDecisionRequest,
+    RefundRequestCreate,
+    RefundRequestResponse,
     BillingPlanResponse,
     BillingMeResponse,
     PaymentConfirmRequest,
@@ -29,6 +32,12 @@ from services.auth import get_current_user, require_roles
 from services.toss_payments import TossPaymentsClient, get_toss_client
 from services.entitlements import get_entitlement_snapshot
 from services.refund_policy import evaluate_refund_policy
+from services.refund_requests import (
+    create_refund_request,
+    decide_refund_request,
+    list_refund_requests,
+    refund_request_response,
+)
 
 
 router = APIRouter()
@@ -96,6 +105,74 @@ def list_my_payments(
         .limit(50)
         .all()
     )
+
+
+@router.post("/refund-requests", response_model=RefundRequestResponse, status_code=status.HTTP_201_CREATED)
+def request_refund(
+    payload: RefundRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    refund_request = create_refund_request(
+        db, current_user, order_id=payload.order_id, reason=payload.reason
+    )
+    order = db.query(PaymentOrder).filter(PaymentOrder.id == refund_request.order_id).one()
+    return refund_request_response(refund_request, order, current_user)
+
+
+@router.get("/refund-requests", response_model=list[RefundRequestResponse])
+def list_my_refund_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return [
+        refund_request_response(request, order, user)
+        for request, order, user in list_refund_requests(db, user_id=current_user.id)
+    ]
+
+
+@router.get("/admin/refund-requests", response_model=list[RefundRequestResponse])
+def list_admin_refund_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return [
+        refund_request_response(request, order, user)
+        for request, order, user in list_refund_requests(db)
+    ]
+
+
+@router.post("/admin/refund-requests/{request_id}/approve", response_model=RefundRequestResponse)
+def approve_refund_request(
+    request_id: int,
+    payload: RefundDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    request = decide_refund_request(
+        db, request_id=request_id, reviewer=current_user, approved=True,
+        reason=payload.reason, toss_client=toss_client,
+    )
+    order = db.query(PaymentOrder).filter(PaymentOrder.id == request.order_id).one()
+    user = db.query(User).filter(User.id == request.user_id).one()
+    return refund_request_response(request, order, user)
+
+
+@router.post("/admin/refund-requests/{request_id}/reject", response_model=RefundRequestResponse)
+def reject_refund_request(
+    request_id: int,
+    payload: RefundDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    request = decide_refund_request(
+        db, request_id=request_id, reviewer=current_user, approved=False,
+        reason=payload.reason,
+    )
+    order = db.query(PaymentOrder).filter(PaymentOrder.id == request.order_id).one()
+    user = db.query(User).filter(User.id == request.user_id).one()
+    return refund_request_response(request, order, user)
 
 
 @router.get("/admin/payments", response_model=list[AdminPaymentResponse])
