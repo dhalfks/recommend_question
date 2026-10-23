@@ -60,6 +60,134 @@ class User(Base):
         "User", remote_side=[id], foreign_keys=[professor_id], backref="students"
     )
 
+
+class BillingPlan(Base):
+    __tablename__ = "billing_plans"
+
+    id = Column(BigInteger, primary_key=True)
+    code = Column(String(50), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    audience_role = Column(String(20), nullable=False)
+    price = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    billing_period = Column(String(20), nullable=False)
+    entitlement_days = Column(Integer, nullable=False)
+    features = Column(JSONB, nullable=False, server_default="{}")
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class UserSubscription(Base):
+    __tablename__ = "user_subscriptions"
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    plan_id = Column(
+        BigInteger, ForeignKey("billing_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    status = Column(String(20), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    current_period_start = Column(DateTime(timezone=True), nullable=True)
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end = Column(Boolean, nullable=False, server_default="false")
+    canceled_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    plan = relationship("BillingPlan", foreign_keys=[plan_id])
+
+
+class PaymentOrder(Base):
+    __tablename__ = "payment_orders"
+
+    id = Column(BigInteger, primary_key=True)
+    order_id = Column(String(100), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    plan_id = Column(
+        BigInteger, ForeignKey("billing_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    subscription_id = Column(
+        BigInteger,
+        ForeignKey("user_subscriptions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    plan_code = Column(String(50), nullable=False)
+    plan_name = Column(String(100), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    status = Column(String(20), nullable=False, server_default="READY")
+    provider = Column(String(20), nullable=False, server_default="TOSS")
+    failure_code = Column(String(100), nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    canceled_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    plan = relationship("BillingPlan", foreign_keys=[plan_id])
+    subscription = relationship("UserSubscription", foreign_keys=[subscription_id])
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+
+    id = Column(BigInteger, primary_key=True)
+    payment_order_id = Column(
+        BigInteger, ForeignKey("payment_orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_payment_id = Column(String(200), nullable=True)
+    transaction_type = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    idempotency_key = Column(String(100), nullable=False, unique=True)
+    provider_response = Column(JSONB, nullable=True)
+    failure_code = Column(String(100), nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order = relationship("PaymentOrder", foreign_keys=[payment_order_id])
+
+
+class AIUsageEvent(Base):
+    __tablename__ = "ai_usage_events"
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    feature_code = Column(String(50), nullable=False)
+    subscription_id = Column(
+        BigInteger,
+        ForeignKey("user_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    request_id = Column(String(100), nullable=False, unique=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False)
+    failure_code = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    subscription = relationship("UserSubscription", foreign_keys=[subscription_id])
+
+
+class PaymentWebhookEvent(Base):
+    __tablename__ = "payment_webhook_events"
+
+    id = Column(BigInteger, primary_key=True)
+    provider = Column(String(20), nullable=False, server_default="TOSS")
+    event_id = Column(String(200), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, server_default="RECEIVED")
+    payload = Column(JSONB, nullable=False)
+    error_message = Column(Text, nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+
 # 데이터베이스 모델
 class Subject(Base):
     __tablename__ = "subjects"

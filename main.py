@@ -6,7 +6,7 @@ import os
 
 from config import settings
 from models import create_tables, get_db, engine, Base
-from routes import auth, progress, questions, files, recommendations, subjects, public_exams, exam_papers
+from routes import auth, billing, progress, questions, files, recommendations, subjects, public_exams, exam_papers
 
 # 스타트업 이벤트 (Vercel 예외 처리 적용)
 @asynccontextmanager
@@ -58,6 +58,7 @@ app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["Recommendations"])
 app.include_router(public_exams.router, prefix="/api/public-exams", tags=["Public Exams"])
 app.include_router(exam_papers.router, prefix="/api/exam-papers", tags=["Exam Papers"])
+app.include_router(billing.router, prefix="/api/billing", tags=["Billing"])
 
 # 헬스 체크
 @app.get("/health")
