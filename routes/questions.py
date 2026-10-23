@@ -41,7 +41,7 @@ async def backfill_answers(
 ):
     from services.answer_enrichment import backfill_missing_answers
 
-    return await backfill_missing_answers(db, limit)
+    return await backfill_missing_answers(db, current_user, limit)
 
 # 특정 문제 조회
 @router.get("/subject-units")
@@ -87,6 +87,19 @@ async def create_question(
     subject = db.query(Subject).filter(Subject.id == question.subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+
+    from services.answer_enrichment import question_needs_enrichment
+    preview = Question(
+        answer_type=question.answer_type,
+        correct_option=None,
+        correct_answer=question.correct_answer,
+        answer_code_snippet=question.answer_code_snippet,
+        explanation=question.explanation,
+    )
+    needs_enrichment = question_needs_enrichment(preview)
+    if needs_enrichment:
+        from services.entitlements import ensure_feature_available
+        ensure_feature_available(db, current_user, "QUESTION_GENERATION")
     
     is_code_input = question.answer_type == AnswerType.CODE_INPUT
     db_question = Question(
@@ -111,9 +124,9 @@ async def create_question(
     db.add(db_question)
     db.commit()
     db.refresh(db_question)
-    if not is_code_input:
+    if needs_enrichment:
         from services.answer_enrichment import enrich_question_by_id
-        background_tasks.add_task(enrich_question_by_id, db_question.id)
+        background_tasks.add_task(enrich_question_by_id, db_question.id, current_user.id)
     return db_question
 
 

@@ -9,6 +9,7 @@ from models import (
     DifficultyLevel,
     Question,
     QuizSession,
+    SessionLocal,
     Subject,
     User,
     UserProgress,
@@ -240,13 +241,17 @@ def has_options(question: Question):
         return bool(str(question.options).strip())
 
 
-async def grade_answer(question: Question, answer):
+async def grade_answer(
+    question: Question,
+    answer,
+    db: Session | None = None,
+    current_user: User | None = None,
+):
     if question.answer_type == AnswerType.CODE_INPUT:
         submitted = normalized_answer(answer)
         if not submitted:
             return False, "제출된 코드가 없습니다."
-        from services.answer_enrichment import grade_code_answer
-        result = await grade_code_answer(question, submitted)
+        result = await tracked_code_review(db, current_user, question, submitted)
         return result["is_correct"], result["explanation"]
 
     if has_options(question):
@@ -264,11 +269,48 @@ async def grade_answer(question: Question, answer):
     if submitted in accepted_answers:
         return True, "모범 답안과 일치합니다."
     if normalized_answer(question.answer_code_snippet):
-        from services.answer_enrichment import grade_code_answer
-
-        result = await grade_code_answer(question, submitted)
+        result = await tracked_code_review(db, current_user, question, submitted)
         return result["is_correct"], result["explanation"]
     return False, None
+
+
+async def tracked_code_review(
+    db: Session | None,
+    current_user: User | None,
+    question: Question,
+    submitted: str,
+):
+    if db is None or current_user is None:
+        raise RuntimeError("AI 코드 채점에는 사용자와 DB 세션이 필요합니다.")
+    from services.ai_usage import complete_ai_usage, reserve_ai_usage
+    from services.answer_enrichment import grade_code_answer
+
+    usage_db = SessionLocal()
+    usage_event = None
+    try:
+        usage_event = reserve_ai_usage(usage_db, current_user, "CODE_REVIEW")
+        result = await grade_code_answer(question, submitted)
+    except Exception:
+        if usage_event is not None:
+            complete_ai_usage(
+                usage_db,
+                usage_event,
+                succeeded=False,
+                failure_code="CODE_REVIEW_ERROR",
+            )
+        raise
+    else:
+        succeeded = result.get("ai_succeeded", True)
+        complete_ai_usage(
+            usage_db,
+            usage_event,
+            succeeded=succeeded,
+            usage=result.get("usage"),
+            failure_code=None if succeeded else "CODE_REVIEW_FAILED",
+        )
+        return result
+    finally:
+        usage_db.close()
 
 
 def achievement_score(question: Question, is_correct: bool, elapsed_seconds: float):
@@ -311,7 +353,9 @@ async def submit_quiz(
     session_id = payload.session_id or str(uuid4())
     for answer in payload.answers:
         question = questions[answer.question_id]
-        is_correct, grading_explanation = await grade_answer(question, answer.answer)
+        is_correct, grading_explanation = await grade_answer(
+            question, answer.answer, db, current_user
+        )
         grading_results.append(
             {
                 "question_id": question.id,
