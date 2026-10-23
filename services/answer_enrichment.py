@@ -6,7 +6,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from config import settings
-from models import AnswerType, Question, SessionLocal
+from models import AnswerType, Question, SessionLocal, User
+from services.ai_usage import complete_ai_usage, reserve_ai_usage
 
 
 client = (
@@ -87,20 +88,41 @@ JSON만 반환하세요:
     return True
 
 
-async def enrich_question_by_id(question_id: int) -> None:
+def question_needs_enrichment(question: Question) -> bool:
+    if question.answer_type == AnswerType.CODE_INPUT:
+        return False
+    needs_answer = (
+        question.correct_option is None
+        and _missing(question.correct_answer)
+        and _missing(question.answer_code_snippet)
+    )
+    return needs_answer or _missing(question.explanation)
+
+
+async def enrich_question_by_id(question_id: int, user_id: int) -> None:
     db = SessionLocal()
+    usage_event = None
     try:
         question = db.query(Question).filter(Question.id == question_id).first()
-        if question and await enrich_question(question):
-            db.commit()
+        user = db.query(User).filter(User.id == user_id).first()
+        if question and user and question_needs_enrichment(question):
+            usage_event = reserve_ai_usage(db, user, "QUESTION_GENERATION")
+            changed = await enrich_question(question)
+            if changed:
+                db.commit()
+            complete_ai_usage(db, usage_event, succeeded=changed)
     except Exception as exc:
         db.rollback()
+        if usage_event is not None:
+            complete_ai_usage(
+                db, usage_event, succeeded=False, failure_code="ANSWER_ENRICHMENT_ERROR"
+            )
         print(f"Question {question_id} enrichment failed: {exc}")
     finally:
         db.close()
 
 
-async def backfill_missing_answers(db: Session, limit: int = 100) -> dict:
+async def backfill_missing_answers(db: Session, user: User, limit: int = 100) -> dict:
     missing_text = lambda column: or_(column.is_(None), func.trim(column) == "")
     questions = (
         db.query(Question)
@@ -123,19 +145,27 @@ async def backfill_missing_answers(db: Session, limit: int = 100) -> dict:
     updated = 0
     failed = []
     for question in questions:
+        usage_event = None
         try:
-            if await enrich_question(question):
+            usage_event = reserve_ai_usage(db, user, "QUESTION_GENERATION")
+            changed = await enrich_question(question)
+            if changed:
                 db.commit()
+                complete_ai_usage(db, usage_event, succeeded=True)
                 updated += 1
         except Exception as exc:
             db.rollback()
+            if usage_event is not None:
+                complete_ai_usage(
+                    db, usage_event, succeeded=False, failure_code="ANSWER_BACKFILL_ERROR"
+                )
             failed.append({"question_id": question.id, "error": str(exc)})
     return {"selected": len(questions), "updated": updated, "failed": failed}
 
 
 async def grade_code_answer(question: Question, submitted_code: str) -> dict:
     if not client:
-        return {"is_correct": False, "explanation": "OpenAI API 키가 없어 코드 채점을 수행하지 못했습니다."}
+        return {"is_correct": False, "explanation": "OpenAI API 키가 없어 코드 채점을 수행하지 못했습니다.", "ai_succeeded": False}
 
     prompt = f"""
 당신은 프로그래밍 코드 채점기입니다. 이 문제에는 별도의 모범 답안이 없습니다.
@@ -161,6 +191,8 @@ JSON만 반환하세요:
 {{"is_correct": true, "confidence": 0.9, "needs_review": false, "explanation": "판정 근거와 리팩토링 제안"}}
 """
 
+    total_usage = {"input_tokens": 0, "output_tokens": 0}
+
     async def request_grade(model: str, *, precise: bool) -> dict:
         review_instruction = "" if not precise else """
 이것은 2차 정밀 채점입니다. 모든 요구사항을 독립적으로 다시 검증하고 최종 판정을 내리세요.
@@ -177,6 +209,13 @@ JSON만 반환하세요:
                 {"type": "code_interpreter", "container": {"type": "auto"}}
             ]
         response = await client.responses.create(**request)
+        response_usage = getattr(response, "usage", None)
+        total_usage["input_tokens"] += int(
+            getattr(response_usage, "input_tokens", 0) or 0
+        )
+        total_usage["output_tokens"] += int(
+            getattr(response_usage, "output_tokens", 0) or 0
+        )
         result = json.loads(response.output_text)
         confidence = float(result.get("confidence", 0))
         return {
@@ -184,6 +223,8 @@ JSON만 반환하세요:
             "confidence": max(0.0, min(1.0, confidence)),
             "needs_review": result.get("needs_review") is True,
             "explanation": str(result.get("explanation") or "").strip(),
+            "ai_succeeded": True,
+            "usage": dict(total_usage),
         }
 
     first_result = None
@@ -215,4 +256,6 @@ JSON만 반환하세요:
             "confidence": 0.0,
             "needs_review": True,
             "explanation": "AI 코드 채점 중 오류가 발생했습니다. 잠시 후 다시 제출해 주세요.",
+            "ai_succeeded": False,
+            "usage": dict(total_usage),
         }

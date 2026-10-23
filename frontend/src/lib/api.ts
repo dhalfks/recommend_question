@@ -31,6 +31,96 @@ export type AuthUser = {
   professor_id?: number | null;
 };
 
+export type BillingPlan = {
+  id: number;
+  code: 'STUDENT_PRO' | 'TEACHER_PRO';
+  name: string;
+  audience_role: 'STUDENT' | 'PROFESSOR';
+  price: number;
+  currency: 'KRW';
+  billing_period: 'ONE_TIME' | 'MONTHLY';
+  entitlement_days: number;
+  features: Record<string, { daily_limit: number }>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BillingOrder = {
+  order_id: string;
+  order_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'READY' | 'PAID' | 'FAILED' | 'CANCELED' | 'REFUNDED';
+  created_at: string;
+  customer_key?: string | null;
+};
+
+export type FeatureEntitlement = {
+  daily_limit: number | null;
+  used_today: number;
+  remaining_today: number | null;
+  is_available: boolean;
+};
+
+export type BillingMe = {
+  plan_code: string;
+  plan_name: string;
+  subscription?: {
+    id: number;
+    plan_code: string;
+    plan_name: string;
+    status: 'ACTIVE';
+    current_period_start: string;
+    current_period_end: string;
+  } | null;
+  features: Record<string, FeatureEntitlement>;
+};
+
+export type BillingPayment = {
+  order_id: string;
+  plan_code: string;
+  plan_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'READY' | 'PAID' | 'FAILED' | 'CANCELED' | 'REFUNDED';
+  created_at: string;
+  paid_at?: string | null;
+};
+
+export type AdminBillingPayment = BillingPayment & {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_role: UserRole;
+  can_close: boolean;
+  can_recover: boolean;
+  standard_full_refund: boolean;
+  requires_manual_review: boolean;
+  paid_feature_usage_count: number;
+  refund_policy_message: string;
+};
+
+export type RefundRequest = {
+  id: number;
+  order_id: string;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  plan_name: string;
+  amount: number;
+  currency: 'KRW';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  standard_full_refund: boolean;
+  requires_manual_review: boolean;
+  paid_feature_usage_count: number;
+  policy_message: string;
+  decision_reason?: string | null;
+  requested_at: string;
+  reviewed_at?: string | null;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -237,6 +327,32 @@ export const authAPI = {
     academic_year?: number;
     course_name?: string;
   }) => api.put('/auth/me', data),
+};
+
+export const billingAPI = {
+  plans: () => api.get<BillingPlan[]>('/billing/plans'),
+  me: () => api.get<BillingMe>('/billing/me'),
+  payments: () => api.get<BillingPayment[]>('/billing/payments'),
+  refundRequests: () => api.get<RefundRequest[]>('/billing/refund-requests'),
+  requestRefund: (orderId: string, reason: string) =>
+    api.post<RefundRequest>('/billing/refund-requests', { order_id: orderId, reason }),
+  adminRefundRequests: () => api.get<RefundRequest[]>('/billing/admin/refund-requests'),
+  approveRefundRequest: (requestId: number, reason: string) =>
+    api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/approve`, { reason }, { timeout: 30000 }),
+  rejectRefundRequest: (requestId: number, reason: string) =>
+    api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/reject`, { reason }),
+  adminPayments: (status?: BillingPayment['status']) =>
+    api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
+  closeAdminPayment: (orderId: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
+  recoverAdminPayment: (orderId: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/recover`, undefined, { timeout: 30000 }),
+  refundAdminPayment: (orderId: string, reason: string) =>
+    api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/refund`, { reason }, { timeout: 30000 }),
+  createOrder: (planCode: string) =>
+    api.post<BillingOrder>('/billing/orders', { plan_code: planCode }),
+  confirm: (data: { payment_key: string; order_id: string; amount: number }) =>
+    api.post('/billing/payments/confirm', data, { timeout: 30000 }),
 };
 
 // 과목 API

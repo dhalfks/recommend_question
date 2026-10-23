@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, CheckConstraint, Index, UniqueConstraint, func
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Text, Float, Numeric, Date, DateTime, ForeignKey, Enum, Boolean, CheckConstraint, Index, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -59,6 +59,328 @@ class User(Base):
     professor = relationship(
         "User", remote_side=[id], foreign_keys=[professor_id], backref="students"
     )
+
+
+class BillingPlan(Base):
+    __tablename__ = "billing_plans"
+    __table_args__ = (
+        CheckConstraint("BTRIM(code) <> ''", name="billing_plans_code_not_blank"),
+        CheckConstraint(
+            "audience_role IN ('STUDENT', 'PROFESSOR')",
+            name="billing_plans_audience_role_valid",
+        ),
+        CheckConstraint("price > 0", name="billing_plans_price_positive"),
+        CheckConstraint("currency = 'KRW'", name="billing_plans_currency_valid"),
+        CheckConstraint(
+            "billing_period IN ('ONE_TIME', 'MONTHLY')",
+            name="billing_plans_period_valid",
+        ),
+        CheckConstraint(
+            "entitlement_days > 0", name="billing_plans_entitlement_days_positive"
+        ),
+        CheckConstraint(
+            "jsonb_typeof(features) = 'object'", name="billing_plans_features_object"
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    code = Column(String(50), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    audience_role = Column(String(20), nullable=False)
+    price = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    billing_period = Column(String(20), nullable=False)
+    entitlement_days = Column(Integer, nullable=False)
+    features = Column(JSONB, nullable=False, server_default="{}")
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class BillingCustomer(Base):
+    __tablename__ = "billing_customers"
+    __table_args__ = (
+        CheckConstraint(
+            "CHAR_LENGTH(customer_key) BETWEEN 10 AND 50",
+            name="billing_customers_key_length",
+        ),
+        CheckConstraint(
+            "customer_key ~ '^[A-Za-z0-9._=@-]+$'",
+            name="billing_customers_key_format",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    customer_key = Column(String(50), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class UserSubscription(Base):
+    __tablename__ = "user_subscriptions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'EXPIRED')",
+            name="user_subscriptions_status_valid",
+        ),
+        CheckConstraint(
+            "current_period_end IS NULL OR current_period_start IS NULL "
+            "OR current_period_end > current_period_start",
+            name="user_subscriptions_period_valid",
+        ),
+        Index(
+            "uq_user_subscriptions_active_plan",
+            "user_id",
+            "plan_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+        ),
+        Index(
+            "idx_user_subscriptions_user_status_end",
+            "user_id",
+            "status",
+            text("current_period_end DESC"),
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    plan_id = Column(
+        BigInteger, ForeignKey("billing_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    status = Column(String(20), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    current_period_start = Column(DateTime(timezone=True), nullable=True)
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end = Column(Boolean, nullable=False, server_default="false")
+    canceled_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    plan = relationship("BillingPlan", foreign_keys=[plan_id])
+
+
+class PaymentOrder(Base):
+    __tablename__ = "payment_orders"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="payment_orders_amount_positive"),
+        CheckConstraint("currency = 'KRW'", name="payment_orders_currency_valid"),
+        CheckConstraint(
+            "status IN ('READY', 'PAID', 'FAILED', 'CANCELED', 'REFUNDED')",
+            name="payment_orders_status_valid",
+        ),
+        CheckConstraint("provider = 'TOSS'", name="payment_orders_provider_valid"),
+        Index("idx_payment_orders_user_created", "user_id", text("created_at DESC")),
+        Index("idx_payment_orders_status_created", "status", "created_at"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    order_id = Column(String(100), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    plan_id = Column(
+        BigInteger, ForeignKey("billing_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    subscription_id = Column(
+        BigInteger,
+        ForeignKey("user_subscriptions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    plan_code = Column(String(50), nullable=False)
+    plan_name = Column(String(100), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    status = Column(String(20), nullable=False, server_default="READY")
+    provider = Column(String(20), nullable=False, server_default="TOSS")
+    failure_code = Column(String(100), nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    canceled_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    plan = relationship("BillingPlan", foreign_keys=[plan_id])
+    subscription = relationship("UserSubscription", foreign_keys=[subscription_id])
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+    __table_args__ = (
+        CheckConstraint(
+            "transaction_type IN ('PAYMENT', 'REFUND')",
+            name="payment_transactions_type_valid",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'SUCCEEDED', 'FAILED')",
+            name="payment_transactions_status_valid",
+        ),
+        CheckConstraint("amount > 0", name="payment_transactions_amount_positive"),
+        CheckConstraint("currency = 'KRW'", name="payment_transactions_currency_valid"),
+        CheckConstraint(
+            "provider_response IS NULL OR jsonb_typeof(provider_response) = 'object'",
+            name="payment_transactions_provider_response_object",
+        ),
+        Index(
+            "uq_payment_transactions_provider_payment_success",
+            "provider_payment_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text(
+                "provider_payment_id IS NOT NULL AND status = 'SUCCEEDED'"
+            ),
+        ),
+        Index(
+            "idx_payment_transactions_order_created",
+            "payment_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    payment_order_id = Column(
+        BigInteger, ForeignKey("payment_orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_payment_id = Column(String(200), nullable=True)
+    transaction_type = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    currency = Column(String(3), nullable=False, server_default="KRW")
+    idempotency_key = Column(String(100), nullable=False, unique=True)
+    provider_response = Column(JSONB, nullable=True)
+    failure_code = Column(String(100), nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order = relationship("PaymentOrder", foreign_keys=[payment_order_id])
+
+
+class RefundRequest(Base):
+    __tablename__ = "refund_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="refund_requests_status_valid",
+        ),
+        CheckConstraint("BTRIM(reason) <> ''", name="refund_requests_reason_not_blank"),
+        CheckConstraint(
+            "jsonb_typeof(eligibility_snapshot) = 'object'",
+            name="refund_requests_snapshot_object",
+        ),
+        Index(
+            "uq_refund_requests_pending_order",
+            "order_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        Index("idx_refund_requests_user_requested", "user_id", text("requested_at DESC")),
+        Index("idx_refund_requests_status_requested", "status", "requested_at"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    order_id = Column(
+        BigInteger, ForeignKey("payment_orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    status = Column(String(20), nullable=False, server_default="PENDING")
+    reason = Column(Text, nullable=False)
+    eligibility_snapshot = Column(JSONB, nullable=False)
+    decision_reason = Column(Text, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    refund_transaction_id = Column(
+        BigInteger,
+        ForeignKey("payment_transactions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    requested_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    order = relationship("PaymentOrder", foreign_keys=[order_id])
+    user = relationship("User", foreign_keys=[user_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    refund_transaction = relationship("PaymentTransaction", foreign_keys=[refund_transaction_id])
+
+
+class AIUsageEvent(Base):
+    __tablename__ = "ai_usage_events"
+    __table_args__ = (
+        CheckConstraint(
+            "feature_code IN ('AI_EXPLANATION', 'CODE_REVIEW', 'QUESTION_GENERATION')",
+            name="ai_usage_events_feature_valid",
+        ),
+        CheckConstraint(
+            "status IN ('STARTED', 'SUCCEEDED', 'FAILED')",
+            name="ai_usage_events_status_valid",
+        ),
+        CheckConstraint(
+            "input_tokens IS NULL OR input_tokens >= 0",
+            name="ai_usage_events_input_tokens_nonnegative",
+        ),
+        CheckConstraint(
+            "output_tokens IS NULL OR output_tokens >= 0",
+            name="ai_usage_events_output_tokens_nonnegative",
+        ),
+        Index(
+            "idx_ai_usage_events_user_feature_created",
+            "user_id",
+            "feature_code",
+            text("created_at DESC"),
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    feature_code = Column(String(50), nullable=False)
+    subscription_id = Column(
+        BigInteger,
+        ForeignKey("user_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    request_id = Column(String(100), nullable=False, unique=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False)
+    failure_code = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    subscription = relationship("UserSubscription", foreign_keys=[subscription_id])
+
+
+class PaymentWebhookEvent(Base):
+    __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "event_id", name="uq_payment_webhook_provider_event"
+        ),
+        CheckConstraint("provider = 'TOSS'", name="payment_webhook_provider_valid"),
+        CheckConstraint(
+            "status IN ('RECEIVED', 'PROCESSED', 'FAILED')",
+            name="payment_webhook_status_valid",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(payload) = 'object'", name="payment_webhook_payload_object"
+        ),
+        Index(
+            "idx_payment_webhook_events_status_received", "status", "received_at"
+        ),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    provider = Column(String(20), nullable=False, server_default="TOSS")
+    event_id = Column(String(200), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, server_default="RECEIVED")
+    payload = Column(JSONB, nullable=False)
+    error_message = Column(Text, nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    processed_at = Column(DateTime(timezone=True), nullable=True)
 
 # 데이터베이스 모델
 class Subject(Base):

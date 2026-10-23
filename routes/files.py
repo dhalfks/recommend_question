@@ -10,6 +10,7 @@ from services.auth import require_roles
 from config import settings
 from services.excel_processor import process_excel_file
 from services.file_processor import process_code_file, save_upload_file
+from services.ai_usage import complete_ai_usage, reserve_ai_usage
 
 router = APIRouter()
 
@@ -132,13 +133,27 @@ async def upload_code_file(
         # 자동 문제 생성
         if auto_generate:
             from services.question_generator import generate_questions_from_code
-            result = await generate_questions_from_code(
-                file_content,
-                file.filename,
-                subject_id,
-                file_ext[1:],
+            usage_event = reserve_ai_usage(db, current_user, "QUESTION_GENERATION")
+            try:
+                result = await generate_questions_from_code(
+                    file_content,
+                    file.filename,
+                    subject_id,
+                    file_ext[1:],
+                    db,
+                    current_user.id if current_user.role == UserRole.PROFESSOR else None,
+                )
+            except Exception:
+                complete_ai_usage(
+                    db, usage_event, succeeded=False, failure_code="QUESTION_GENERATION_ERROR"
+                )
+                raise
+            complete_ai_usage(
                 db,
-                current_user.id if current_user.role == UserRole.PROFESSOR else None,
+                usage_event,
+                succeeded=result["success"],
+                usage=result.get("usage"),
+                failure_code=None if result["success"] else "QUESTION_GENERATION_FAILED",
             )
             if not result["success"]:
                 raise HTTPException(status_code=502, detail=result["message"])

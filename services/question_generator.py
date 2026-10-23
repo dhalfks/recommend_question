@@ -37,6 +37,14 @@ def serialize_question(question: Question) -> dict:
     }
 
 
+def _response_usage(response) -> dict:
+    usage = getattr(response, "usage", None)
+    return {
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+    }
+
+
 async def generate_questions_from_code(
     code_content: str,
     file_name: str,
@@ -72,7 +80,7 @@ async def generate_questions_from_code(
         )
         generated = response.output_parsed
         if generated is None:
-            return {"success": False, "count": 0, "questions": [], "message": "OpenAI가 문항 생성을 완료하지 못했습니다."}
+            return {"success": False, "count": 0, "questions": [], "message": "OpenAI가 문항 생성을 완료하지 못했습니다.", "usage": _response_usage(response)}
 
         created = []
         for data in generated.questions:
@@ -108,6 +116,7 @@ async def generate_questions_from_code(
             "count": len(created),
             "questions": [serialize_question(question) for question in created],
             "message": f"{file_name}에서 {len(created)}개의 문제를 생성하고 저장했습니다.",
+            "usage": _response_usage(response),
         }
     except Exception as error:
         db.rollback()

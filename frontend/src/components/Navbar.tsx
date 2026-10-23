@@ -29,7 +29,10 @@ export default function Navbar() {
             </>
           )}
           {user?.role === 'ADMIN' && (
-            <Link href="/admin/public-exams" className="rounded-lg px-3 py-2 hover:bg-white/10">공통 기출 관리</Link>
+            <>
+              <Link href="/admin/billing" className="rounded-lg px-3 py-2 hover:bg-white/10">결제 관리</Link>
+              <Link href="/admin/public-exams" className="rounded-lg px-3 py-2 hover:bg-white/10">공통 기출 관리</Link>
+            </>
           )}
           {!loading && !user && (
             <>
@@ -39,6 +42,9 @@ export default function Navbar() {
           )}
           {user && (
             <>
+              {user.role !== 'ADMIN' && (
+                <Link href="/pricing" className="rounded-lg px-3 py-2 hover:bg-white/10">요금제</Link>
+              )}
               <Link href="/profile" className="hidden rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10 sm:inline">
                 {user.name} · {roleLabel[user.role]}
               </Link>

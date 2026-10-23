@@ -1,0 +1,90 @@
+from pathlib import Path
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PRICING = (ROOT / "frontend/src/pages/pricing.tsx").read_text(encoding="utf-8")
+CHECKOUT = (ROOT / "frontend/src/pages/billing/checkout.tsx").read_text(encoding="utf-8")
+SUCCESS = (ROOT / "frontend/src/pages/billing/success.tsx").read_text(encoding="utf-8")
+FAIL = (ROOT / "frontend/src/pages/billing/fail.tsx").read_text(encoding="utf-8")
+API = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+MIGRATION = (ROOT / "migrations/20261023_add_billing_customers.sql").read_text(
+    encoding="utf-8"
+)
+
+
+class BillingFrontendContractTests(unittest.TestCase):
+    def test_customer_key_is_random_and_stored_outside_users(self):
+        self.assertIn("CREATE TABLE billing_customers", MIGRATION)
+        self.assertIn("UNIQUE (user_id)", MIGRATION)
+        self.assertIn("UNIQUE (customer_key)", MIGRATION)
+        self.assertNotIn("ALTER TABLE users", MIGRATION)
+
+    def test_pricing_creates_server_order_before_checkout(self):
+        self.assertIn("billingAPI.createOrder(plan.code)", PRICING)
+        self.assertIn("billing-order:${order.order_id}", PRICING)
+        self.assertNotIn("amount:", PRICING.split("createOrder", 1)[1].split(";", 1)[0])
+
+    def test_checkout_uses_toss_v2_widget_and_server_order_amount(self):
+        self.assertIn("loadTossPayments", CHECKOUT)
+        self.assertIn("widgets({ customerKey: order.customer_key! })", CHECKOUT)
+        self.assertIn("value: order.amount", CHECKOUT)
+        self.assertIn("renderPaymentMethods", CHECKOUT)
+        self.assertIn("renderAgreement", CHECKOUT)
+        self.assertIn("widgets.requestPayment", CHECKOUT)
+
+    def test_checkout_cancels_widget_initialization_after_unmount(self):
+        self.assertIn("window.requestAnimationFrame", CHECKOUT)
+        self.assertIn("window.cancelAnimationFrame", CHECKOUT)
+        self.assertIn("if (!active) return", CHECKOUT)
+        self.assertIn("if (active) {", CHECKOUT)
+
+    def test_success_calls_our_backend_not_toss_api(self):
+        self.assertIn("billingAPI.confirm", SUCCESS)
+        self.assertNotIn("api.tosspayments.com", SUCCESS)
+        self.assertIn("payment_key: paymentKey", SUCCESS)
+
+    def test_success_retries_ambiguous_network_failures_and_checks_saved_order(self):
+        self.assertIn("attempt < 3", SUCCESS)
+        self.assertIn("error.response.status >= 500", SUCCESS)
+        self.assertIn("billingAPI.payments()", SUCCESS)
+        self.assertIn("payment.status === 'PAID'", SUCCESS)
+        self.assertIn("결제 확인 지연", SUCCESS)
+
+    def test_failure_does_not_confirm_payment(self):
+        self.assertNotIn("billingAPI.confirm", FAIL)
+        self.assertIn("PAY_PROCESS_CANCELED", FAIL)
+
+    def test_api_has_all_billing_endpoints(self):
+        for path in ("/billing/plans", "/billing/me", "/billing/payments", "/billing/orders", "/billing/payments/confirm"):
+            self.assertIn(path, API)
+
+    def test_profile_billing_summary_loads_payment_history(self):
+        summary = (ROOT / "frontend/src/components/BillingSummary.tsx").read_text(encoding="utf-8")
+        self.assertIn("billingAPI.payments()", summary)
+        self.assertIn("payment.order_id", summary)
+        self.assertNotIn("provider_payment_id", summary)
+
+    def test_admin_billing_page_is_admin_only(self):
+        page = (ROOT / "frontend/src/pages/admin/billing.tsx").read_text(encoding="utf-8")
+        self.assertIn("roles={['ADMIN']}", page)
+        self.assertIn("billingAPI.adminPayments", page)
+        self.assertNotIn("provider_payment_id", page)
+        self.assertIn("미결제 주문 종료", page)
+        self.assertIn("결제 상태 확인 및 복구", page)
+        self.assertIn("payment.can_close", page)
+        self.assertIn("payment.can_recover", page)
+        self.assertIn("전액 환불", page)
+        self.assertIn("billingAPI.refundAdminPayment", page)
+
+    def test_refund_policy_is_disclosed_before_checkout(self):
+        pricing = (ROOT / "frontend/src/pages/pricing.tsx").read_text(encoding="utf-8")
+        policy = (ROOT / "frontend/src/pages/refund-policy.tsx").read_text(encoding="utf-8")
+        self.assertIn('href="/refund-policy"', pricing)
+        self.assertIn("결제 후 7일 이내", policy)
+        self.assertIn("유료 AI 기능을 사용하지 않은 경우", policy)
+        self.assertIn("관계 법령", policy)
+
+
+if __name__ == "__main__":
+    unittest.main()
