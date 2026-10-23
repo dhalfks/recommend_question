@@ -151,12 +151,18 @@ export default function AdminBillingPage() {
                         </div>
                       )}
                       {payment.status === 'PAID' && (
-                        <button
-                          type="button"
-                          className="mt-2 text-xs font-semibold text-red-700 underline disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={processingOrderId === payment.order_id}
-                          onClick={() => void refundPayment(payment)}
-                        >전액 환불</button>
+                        <div className="mt-2 flex flex-col items-end gap-1">
+                          <span className={`text-xs ${payment.standard_full_refund ? 'text-green-700' : 'text-amber-700'}`} title={payment.refund_policy_message}>
+                            {payment.standard_full_refund ? '기본 전액 환불 대상' : '관리자 검토 필요'}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-red-700 underline disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={processingOrderId === payment.order_id}
+                            title={payment.refund_policy_message}
+                            onClick={() => void refundPayment(payment)}
+                          >전액 환불</button>
+                        </div>
                       )}
                     </td>
                   </tr>

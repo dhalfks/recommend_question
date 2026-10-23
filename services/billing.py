@@ -439,7 +439,10 @@ def refund_payment(
 
     now = datetime.now(timezone.utc)
     refund_transaction.status = "SUCCEEDED"
-    refund_transaction.provider_response = _safe_provider_response(payment)
+    refund_transaction.provider_response = {
+        **_safe_provider_response(payment),
+        "refundReason": reason,
+    }
     order.status = "REFUNDED"
     order.canceled_at = now
     order.failure_code = None

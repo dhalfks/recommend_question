@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import ProtectedPage from '@/components/ProtectedPage';
@@ -93,6 +94,9 @@ export default function PricingPage() {
               </section>
             ))}
           </div>
+          <p className="mx-auto mt-6 max-w-3xl text-center text-sm text-[#6C757D]">
+            결제 전 <Link href="/refund-policy" className="font-semibold text-[#3B86D1] underline">환불 정책</Link>을 확인해 주세요.
+          </p>
         </main>
         <Footer />
       </div>

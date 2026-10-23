@@ -70,6 +70,14 @@ class BillingFrontendContractTests(unittest.TestCase):
         self.assertIn("전액 환불", page)
         self.assertIn("billingAPI.refundAdminPayment", page)
 
+    def test_refund_policy_is_disclosed_before_checkout(self):
+        pricing = (ROOT / "frontend/src/pages/pricing.tsx").read_text(encoding="utf-8")
+        policy = (ROOT / "frontend/src/pages/refund-policy.tsx").read_text(encoding="utf-8")
+        self.assertIn('href="/refund-policy"', pricing)
+        self.assertIn("결제 후 7일 이내", policy)
+        self.assertIn("유료 AI 기능을 사용하지 않은 경우", policy)
+        self.assertIn("관계 법령", policy)
+
 
 if __name__ == "__main__":
     unittest.main()

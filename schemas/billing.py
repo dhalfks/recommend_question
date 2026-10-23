@@ -79,6 +79,10 @@ class AdminPaymentResponse(PaymentHistoryResponse):
     user_role: Literal["STUDENT", "PROFESSOR", "ADMIN"]
     can_close: bool
     can_recover: bool
+    standard_full_refund: bool
+    requires_manual_review: bool
+    paid_feature_usage_count: int
+    refund_policy_message: str
 
 
 class AdminPaymentActionResponse(BaseModel):

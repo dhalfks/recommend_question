@@ -28,6 +28,7 @@ from services.billing import (
 from services.auth import get_current_user, require_roles
 from services.toss_payments import TossPaymentsClient, get_toss_client
 from services.entitlements import get_entitlement_snapshot
+from services.refund_policy import evaluate_refund_policy
 
 
 router = APIRouter()
@@ -125,6 +126,10 @@ def list_admin_payments(
     for transaction in transactions:
         latest_transactions.setdefault(transaction.payment_order_id, transaction)
     close_before = datetime.now(timezone.utc) - timedelta(minutes=30)
+    refund_policies = {
+        order.id: evaluate_refund_policy(db, order)
+        for order, _ in rows
+    }
     return [
         {
             "order_id": order.order_id,
@@ -160,6 +165,10 @@ def list_admin_payments(
                     )
                 )
             ),
+            "standard_full_refund": refund_policies[order.id]["standard_full_refund"],
+            "requires_manual_review": refund_policies[order.id]["requires_manual_review"],
+            "paid_feature_usage_count": refund_policies[order.id]["paid_feature_usage_count"],
+            "refund_policy_message": refund_policies[order.id]["message"],
         }
         for order, user in rows
     ]

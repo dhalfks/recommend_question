@@ -95,6 +95,10 @@ export type AdminBillingPayment = BillingPayment & {
   user_role: UserRole;
   can_close: boolean;
   can_recover: boolean;
+  standard_full_refund: boolean;
+  requires_manual_review: boolean;
+  paid_feature_usage_count: number;
+  refund_policy_message: string;
 };
 
 export type ProfessorOption = {
