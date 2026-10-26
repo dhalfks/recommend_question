@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+import hmac
 from sqlalchemy.orm import Session
 from typing import Literal
 from datetime import datetime, timedelta, timezone
@@ -47,9 +48,38 @@ from services.payment_webhooks import list_admin_webhook_events, process_toss_pa
 from services.ai_usage_analytics import get_admin_ai_usage
 from services.subscriptions import expire_due_subscriptions, list_admin_subscriptions
 from services.toss_payments import TossPaymentError
+from config import settings
 
 
 router = APIRouter()
+
+
+def verify_cron_authorization(authorization: str | None) -> None:
+    cron_secret = settings.CRON_SECRET.strip()
+    if not cron_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CRON_SECRET이 설정되지 않았습니다.",
+        )
+    expected = f"Bearer {cron_secret}"
+    if authorization is None or not hmac.compare_digest(authorization, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 스케줄 요청입니다.",
+        )
+
+
+@router.get("/cron/subscriptions/expire", response_model=SubscriptionExpiryResponse)
+def automatically_expire_subscriptions(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    verify_cron_authorization(authorization)
+    expired_count = expire_due_subscriptions(db)
+    return {
+        "expired_count": expired_count,
+        "message": f"기간이 종료된 이용권 {expired_count}건을 자동 만료 처리했습니다.",
+    }
 
 
 @router.get("/admin/webhooks", response_model=list[AdminWebhookEventResponse])

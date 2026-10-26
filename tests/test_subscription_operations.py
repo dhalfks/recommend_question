@@ -1,9 +1,12 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from fastapi import HTTPException
 
 from services.subscriptions import expire_due_subscriptions
+from routes.billing import verify_cron_authorization
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +37,27 @@ class SubscriptionOperationsTests(unittest.TestCase):
         self.assertIn("만료 상태 정리", page)
         self.assertIn("billingAPI.expireSubscriptions", page)
         self.assertIn('href="/admin/subscriptions"', nav)
+
+    def test_cron_authorization_accepts_only_configured_bearer_secret(self):
+        with patch("routes.billing.settings.CRON_SECRET", "a-secure-cron-secret"):
+            verify_cron_authorization("Bearer a-secure-cron-secret")
+            with self.assertRaises(HTTPException) as invalid:
+                verify_cron_authorization("Bearer wrong-secret")
+            self.assertEqual(invalid.exception.status_code, 401)
+
+    def test_cron_authorization_fails_closed_without_secret(self):
+        with patch("routes.billing.settings.CRON_SECRET", ""):
+            with self.assertRaises(HTTPException) as missing:
+                verify_cron_authorization(None)
+            self.assertEqual(missing.exception.status_code, 503)
+
+    def test_vercel_runs_daily_expiry_cron(self):
+        config = (ROOT / "vercel.json").read_text(encoding="utf-8")
+        route = (ROOT / "routes/billing.py").read_text(encoding="utf-8")
+        self.assertIn('"path": "/api/billing/cron/subscriptions/expire"', config)
+        self.assertIn('"schedule": "10 15 * * *"', config)
+        self.assertIn('@router.get("/cron/subscriptions/expire"', route)
+        self.assertIn("verify_cron_authorization(authorization)", route)
 
 
 if __name__ == "__main__":

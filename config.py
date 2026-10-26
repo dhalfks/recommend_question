@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_SIGNUP_CODE: str = ""
+    CRON_SECRET: str = ""
     
     # File Upload
     UPLOAD_DIR: str = "uploads"
