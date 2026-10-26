@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from services.payment_webhooks import list_admin_webhook_events
+from fastapi import HTTPException
+
+from services.payment_webhooks import list_admin_webhook_events, retry_failed_webhook_event
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +48,24 @@ class AdminWebhookHistoryTests(unittest.TestCase):
         self.assertIn("billingAPI.adminWebhooks", page)
         self.assertIn("처리 실패", page)
         self.assertIn('href="/admin/webhooks"', navbar)
+
+    def test_only_failed_webhook_can_be_retried(self):
+        event = SimpleNamespace(status="PROCESSED")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = event
+
+        with self.assertRaises(HTTPException) as raised:
+            retry_failed_webhook_event(db, event_id=7, toss_client=MagicMock())
+
+        self.assertEqual(raised.exception.status_code, 409)
+
+    def test_retry_route_and_button_are_available(self):
+        route = (ROOT / "routes/billing.py").read_text(encoding="utf-8")
+        page = (ROOT / "frontend/src/pages/admin/webhooks.tsx").read_text(encoding="utf-8")
+        self.assertIn('@router.post("/admin/webhooks/{event_id}/retry"', route)
+        self.assertIn("retry_failed_webhook_event", route)
+        self.assertIn("billingAPI.retryAdminWebhook", page)
+        self.assertIn("다시 검증", page)
 
 
 if __name__ == "__main__":

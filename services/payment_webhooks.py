@@ -31,21 +31,44 @@ def list_admin_webhook_events(
         .limit(limit)
         .all()
     )
-    return [
-        {
-            "id": event.id,
-            "provider": event.provider,
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "status": event.status,
-            "order_id": (event.payload or {}).get("orderId"),
-            "payment_status": (event.payload or {}).get("status"),
-            "error_message": event.error_message,
-            "received_at": event.received_at,
-            "processed_at": event.processed_at,
-        }
-        for event in events
-    ]
+    return [webhook_event_response(event) for event in events]
+
+
+def webhook_event_response(event: PaymentWebhookEvent) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "provider": event.provider,
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "status": event.status,
+        "order_id": (event.payload or {}).get("orderId"),
+        "payment_status": (event.payload or {}).get("status"),
+        "error_message": event.error_message,
+        "received_at": event.received_at,
+        "processed_at": event.processed_at,
+    }
+
+
+def retry_failed_webhook_event(
+    db: Session, *, event_id: int, toss_client: TossPaymentsClient
+) -> PaymentWebhookEvent:
+    event = (
+        db.query(PaymentWebhookEvent)
+        .filter(PaymentWebhookEvent.id == event_id)
+        .first()
+    )
+    if event is None:
+        raise HTTPException(status_code=404, detail="웹훅 이벤트를 찾을 수 없습니다.")
+    if event.status != "FAILED":
+        raise HTTPException(status_code=409, detail="실패한 웹훅만 재처리할 수 있습니다.")
+
+    retried, _ = process_toss_payment_webhook(
+        db,
+        payload=dict(event.payload or {}),
+        transmission_id=event.event_id,
+        toss_client=toss_client,
+    )
+    return retried
 
 
 def _event_id(transmission_id: str | None, payload: dict[str, Any]) -> str:

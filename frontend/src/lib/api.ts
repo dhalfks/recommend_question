@@ -399,6 +399,8 @@ export const billingAPI = {
     api.post<{ expired_count: number; message: string }>('/billing/admin/subscriptions/expire'),
   adminWebhooks: (status?: AdminWebhookEvent['status']) =>
     api.get<AdminWebhookEvent[]>('/billing/admin/webhooks', { params: status ? { status } : undefined }),
+  retryAdminWebhook: (eventId: number) =>
+    api.post<AdminWebhookEvent>(`/billing/admin/webhooks/${eventId}/retry`, undefined, { timeout: 30000 }),
   closeAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>

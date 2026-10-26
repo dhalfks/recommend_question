@@ -44,7 +44,12 @@ from services.refund_requests import (
     list_refund_requests,
     refund_request_response,
 )
-from services.payment_webhooks import list_admin_webhook_events, process_toss_payment_webhook
+from services.payment_webhooks import (
+    list_admin_webhook_events,
+    process_toss_payment_webhook,
+    retry_failed_webhook_event,
+    webhook_event_response,
+)
 from services.ai_usage_analytics import get_admin_ai_usage
 from services.subscriptions import expire_due_subscriptions, list_admin_subscriptions
 from services.toss_payments import TossPaymentError
@@ -90,6 +95,25 @@ def get_admin_webhook_events(
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     return list_admin_webhook_events(db, event_status=event_status, limit=limit)
+
+
+@router.post("/admin/webhooks/{event_id}/retry", response_model=AdminWebhookEventResponse)
+def retry_admin_webhook_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    try:
+        event = retry_failed_webhook_event(
+            db, event_id=event_id, toss_client=toss_client
+        )
+    except TossPaymentError as exc:
+        raise HTTPException(
+            status_code=503 if exc.status_code >= 500 else 400,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    return webhook_event_response(event)
 
 
 @router.get("/admin/ai-usage", response_model=AdminAIUsageResponse)
