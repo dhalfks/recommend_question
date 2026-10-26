@@ -142,3 +142,56 @@ class PaymentWebhookResponse(BaseModel):
     event_id: str
     status: Literal["PROCESSED", "FAILED"]
     duplicate: bool
+
+
+class AdminWebhookEventResponse(BaseModel):
+    id: int
+    provider: Literal["TOSS"]
+    event_id: str
+    event_type: str
+    status: Literal["RECEIVED", "PROCESSED", "FAILED"]
+    order_id: str | None = None
+    payment_status: str | None = None
+    error_message: str | None = None
+    received_at: datetime
+    processed_at: datetime | None = None
+
+
+class AIUsageMetric(BaseModel):
+    key: str
+    label: str
+    total_requests: int
+    succeeded_requests: int
+    failed_requests: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_krw: float
+
+
+class AdminAIUsageResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    cost_configured: bool
+    summary: AIUsageMetric
+    by_feature: list[AIUsageMetric]
+    by_user: list[AIUsageMetric]
+
+
+class AdminSubscriptionResponse(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    user_role: Literal["STUDENT", "PROFESSOR", "ADMIN"]
+    plan_code: str
+    plan_name: str
+    status: Literal["PENDING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"]
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    remaining_days: int
+    created_at: datetime
+
+
+class SubscriptionExpiryResponse(BaseModel):
+    expired_count: int
+    message: str

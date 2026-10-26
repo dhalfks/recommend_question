@@ -121,6 +121,54 @@ export type RefundRequest = {
   reviewed_at?: string | null;
 };
 
+export type AIUsageMetric = {
+  key: string;
+  label: string;
+  total_requests: number;
+  succeeded_requests: number;
+  failed_requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_krw: number;
+};
+
+export type AdminAIUsage = {
+  period_start: string;
+  period_end: string;
+  cost_configured: boolean;
+  summary: AIUsageMetric;
+  by_feature: AIUsageMetric[];
+  by_user: AIUsageMetric[];
+};
+
+export type AdminSubscription = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_role: UserRole;
+  plan_code: string;
+  plan_name: string;
+  status: 'PENDING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED';
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  remaining_days: number;
+  created_at: string;
+};
+
+export type AdminWebhookEvent = {
+  id: number;
+  provider: 'TOSS';
+  event_id: string;
+  event_type: string;
+  status: 'RECEIVED' | 'PROCESSED' | 'FAILED';
+  order_id?: string | null;
+  payment_status?: string | null;
+  error_message?: string | null;
+  received_at: string;
+  processed_at?: string | null;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -343,6 +391,16 @@ export const billingAPI = {
     api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/reject`, { reason }),
   adminPayments: (status?: BillingPayment['status']) =>
     api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
+  adminAIUsage: (days: number) =>
+    api.get<AdminAIUsage>('/billing/admin/ai-usage', { params: { days } }),
+  adminSubscriptions: (status?: AdminSubscription['status']) =>
+    api.get<AdminSubscription[]>('/billing/admin/subscriptions', { params: status ? { status } : undefined }),
+  expireSubscriptions: () =>
+    api.post<{ expired_count: number; message: string }>('/billing/admin/subscriptions/expire'),
+  adminWebhooks: (status?: AdminWebhookEvent['status']) =>
+    api.get<AdminWebhookEvent[]>('/billing/admin/webhooks', { params: status ? { status } : undefined }),
+  retryAdminWebhook: (eventId: number) =>
+    api.post<AdminWebhookEvent>(`/billing/admin/webhooks/${eventId}/retry`, undefined, { timeout: 30000 }),
   closeAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>

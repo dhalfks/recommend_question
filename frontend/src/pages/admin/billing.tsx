@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import ProtectedPage from '@/components/ProtectedPage';
@@ -26,24 +26,24 @@ export default function AdminBillingPage() {
   const [loading, setLoading] = useState(true);
   const [processingOrderId, setProcessingOrderId] = useState('');
 
-  const loadPayments = () => {
+  const loadPayments = useCallback(() => {
     setLoading(true);
     setError('');
     return billingAPI.adminPayments(status || undefined)
       .then(({ data }) => setPayments(data))
       .catch(() => setError('결제 현황을 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
-  };
+  }, [status]);
 
   useEffect(() => {
     void loadPayments();
-  }, [status]);
+  }, [loadPayments]);
 
-  const loadRefundRequests = () => billingAPI.adminRefundRequests()
+  const loadRefundRequests = useCallback(() => billingAPI.adminRefundRequests()
     .then(({ data }) => setRefundRequests(data))
-    .catch(() => setError('환불 신청 목록을 불러오지 못했습니다.'));
+    .catch(() => setError('환불 신청 목록을 불러오지 못했습니다.')), []);
 
-  useEffect(() => { void loadRefundRequests(); }, []);
+  useEffect(() => { void loadRefundRequests(); }, [loadRefundRequests]);
 
   const decideRefund = async (request: RefundRequest, approved: boolean) => {
     const reason = window.prompt(approved ? '승인 사유를 입력해 주세요.' : '반려 사유를 입력해 주세요.');

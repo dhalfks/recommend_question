@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+import hmac
 from sqlalchemy.orm import Session
 from typing import Literal
 from datetime import datetime, timedelta, timezone
@@ -6,6 +7,9 @@ from datetime import datetime, timedelta, timezone
 from models import BillingPlan, PaymentOrder, PaymentTransaction, User, UserRole, get_db
 from schemas.billing import (
     AdminPaymentActionResponse,
+    AdminAIUsageResponse,
+    AdminSubscriptionResponse,
+    AdminWebhookEventResponse,
     AdminRefundRequest,
     AdminPaymentResponse,
     RefundDecisionRequest,
@@ -19,6 +23,7 @@ from schemas.billing import (
     PaymentOrderCreate,
     PaymentOrderResponse,
     PaymentWebhookResponse,
+    SubscriptionExpiryResponse,
 )
 from services.billing import (
     close_unpaid_order,
@@ -39,11 +44,109 @@ from services.refund_requests import (
     list_refund_requests,
     refund_request_response,
 )
-from services.payment_webhooks import process_toss_payment_webhook
+from services.payment_webhooks import (
+    list_admin_webhook_events,
+    process_toss_payment_webhook,
+    retry_failed_webhook_event,
+    webhook_event_response,
+)
+from services.ai_usage_analytics import get_admin_ai_usage
+from services.subscriptions import expire_due_subscriptions, list_admin_subscriptions
 from services.toss_payments import TossPaymentError
+from config import settings
 
 
 router = APIRouter()
+
+
+def verify_cron_authorization(authorization: str | None) -> None:
+    cron_secret = settings.CRON_SECRET.strip()
+    if not cron_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CRON_SECRET이 설정되지 않았습니다.",
+        )
+    expected = f"Bearer {cron_secret}"
+    if authorization is None or not hmac.compare_digest(authorization, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 스케줄 요청입니다.",
+        )
+
+
+@router.get("/cron/subscriptions/expire", response_model=SubscriptionExpiryResponse)
+def automatically_expire_subscriptions(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    verify_cron_authorization(authorization)
+    expired_count = expire_due_subscriptions(db)
+    return {
+        "expired_count": expired_count,
+        "message": f"기간이 종료된 이용권 {expired_count}건을 자동 만료 처리했습니다.",
+    }
+
+
+@router.get("/admin/webhooks", response_model=list[AdminWebhookEventResponse])
+def get_admin_webhook_events(
+    event_status: Literal["RECEIVED", "PROCESSED", "FAILED"] | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return list_admin_webhook_events(db, event_status=event_status, limit=limit)
+
+
+@router.post("/admin/webhooks/{event_id}/retry", response_model=AdminWebhookEventResponse)
+def retry_admin_webhook_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    toss_client: TossPaymentsClient = Depends(get_toss_client),
+):
+    try:
+        event = retry_failed_webhook_event(
+            db, event_id=event_id, toss_client=toss_client
+        )
+    except TossPaymentError as exc:
+        raise HTTPException(
+            status_code=503 if exc.status_code >= 500 else 400,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    return webhook_event_response(event)
+
+
+@router.get("/admin/ai-usage", response_model=AdminAIUsageResponse)
+def get_admin_ai_usage_report(
+    days: int = Query(default=30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return get_admin_ai_usage(db, days=days)
+
+
+@router.get("/admin/subscriptions", response_model=list[AdminSubscriptionResponse])
+def get_admin_subscriptions(
+    subscription_status: Literal["PENDING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"] | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return list_admin_subscriptions(
+        db, subscription_status=subscription_status, limit=limit
+    )
+
+
+@router.post("/admin/subscriptions/expire", response_model=SubscriptionExpiryResponse)
+def reconcile_expired_subscriptions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    expired_count = expire_due_subscriptions(db)
+    return {
+        "expired_count": expired_count,
+        "message": f"기간이 종료된 이용권 {expired_count}건을 만료 처리했습니다.",
+    }
 
 
 @router.post("/webhooks/toss", response_model=PaymentWebhookResponse)

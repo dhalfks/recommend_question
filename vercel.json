@@ -27,5 +27,11 @@
       "src": "/(.*)",
       "dest": "frontend/$1"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/billing/cron/subscriptions/expire",
+      "schedule": "10 15 * * *"
+    }
   ]
 }

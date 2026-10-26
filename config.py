@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     OPENAI_GRADING_MODEL: str = "gpt-5.6-luna"
     OPENAI_GRADING_REVIEW_MODEL: str = "gpt-5.6-sol"
     OPENAI_GRADING_CONFIDENCE_THRESHOLD: float = 0.75
+    AI_INPUT_COST_PER_MILLION_KRW: float = 0.0
+    AI_OUTPUT_COST_PER_MILLION_KRW: float = 0.0
 
     # Toss Payments (server-side secret only)
     TOSS_SECRET_KEY: str = ""
@@ -26,6 +28,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_SIGNUP_CODE: str = ""
+    CRON_SECRET: str = ""
     
     # File Upload
     UPLOAD_DIR: str = "uploads"
