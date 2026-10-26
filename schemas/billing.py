@@ -144,6 +144,19 @@ class PaymentWebhookResponse(BaseModel):
     duplicate: bool
 
 
+class AdminWebhookEventResponse(BaseModel):
+    id: int
+    provider: Literal["TOSS"]
+    event_id: str
+    event_type: str
+    status: Literal["RECEIVED", "PROCESSED", "FAILED"]
+    order_id: str | None = None
+    payment_status: str | None = None
+    error_message: str | None = None
+    received_at: datetime
+    processed_at: datetime | None = None
+
+
 class AIUsageMetric(BaseModel):
     key: str
     label: str

@@ -8,6 +8,7 @@ from schemas.billing import (
     AdminPaymentActionResponse,
     AdminAIUsageResponse,
     AdminSubscriptionResponse,
+    AdminWebhookEventResponse,
     AdminRefundRequest,
     AdminPaymentResponse,
     RefundDecisionRequest,
@@ -42,13 +43,23 @@ from services.refund_requests import (
     list_refund_requests,
     refund_request_response,
 )
-from services.payment_webhooks import process_toss_payment_webhook
+from services.payment_webhooks import list_admin_webhook_events, process_toss_payment_webhook
 from services.ai_usage_analytics import get_admin_ai_usage
 from services.subscriptions import expire_due_subscriptions, list_admin_subscriptions
 from services.toss_payments import TossPaymentError
 
 
 router = APIRouter()
+
+
+@router.get("/admin/webhooks", response_model=list[AdminWebhookEventResponse])
+def get_admin_webhook_events(
+    event_status: Literal["RECEIVED", "PROCESSED", "FAILED"] | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return list_admin_webhook_events(db, event_status=event_status, limit=limit)
 
 
 @router.get("/admin/ai-usage", response_model=AdminAIUsageResponse)

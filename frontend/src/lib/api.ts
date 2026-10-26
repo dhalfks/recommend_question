@@ -156,6 +156,19 @@ export type AdminSubscription = {
   created_at: string;
 };
 
+export type AdminWebhookEvent = {
+  id: number;
+  provider: 'TOSS';
+  event_id: string;
+  event_type: string;
+  status: 'RECEIVED' | 'PROCESSED' | 'FAILED';
+  order_id?: string | null;
+  payment_status?: string | null;
+  error_message?: string | null;
+  received_at: string;
+  processed_at?: string | null;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -384,6 +397,8 @@ export const billingAPI = {
     api.get<AdminSubscription[]>('/billing/admin/subscriptions', { params: status ? { status } : undefined }),
   expireSubscriptions: () =>
     api.post<{ expired_count: number; message: string }>('/billing/admin/subscriptions/expire'),
+  adminWebhooks: (status?: AdminWebhookEvent['status']) =>
+    api.get<AdminWebhookEvent[]>('/billing/admin/webhooks', { params: status ? { status } : undefined }),
   closeAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>
