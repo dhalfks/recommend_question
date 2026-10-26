@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import ProtectedPage from '@/components/ProtectedPage';
@@ -22,14 +22,14 @@ export default function AdminWebhooksPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true); setError('');
     return billingAPI.adminWebhooks(status || undefined)
       .then(({ data }) => setEvents(data))
       .catch(() => setError('웹훅 처리 이력을 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
-  };
-  useEffect(() => { void load(); }, [status]);
+  }, [status]);
+  useEffect(() => { void load(); }, [load]);
 
   const retry = async (event: AdminWebhookEvent) => {
     if (!window.confirm('토스 결제 상태를 다시 확인하고 이 웹훅을 재처리할까요?')) return;

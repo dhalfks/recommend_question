@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import ProtectedPage from '@/components/ProtectedPage';
@@ -19,12 +19,12 @@ export default function AdminSubscriptionsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true); setError('');
     return billingAPI.adminSubscriptions(status || undefined).then(({ data }) => setSubscriptions(data))
       .catch(() => setError('이용권 현황을 불러오지 못했습니다.')).finally(() => setLoading(false));
-  };
-  useEffect(() => { void load(); }, [status]);
+  }, [status]);
+  useEffect(() => { void load(); }, [load]);
 
   const expireDue = async () => {
     if (!window.confirm('종료 시각이 지난 ACTIVE 이용권을 EXPIRED 상태로 정리할까요?')) return;

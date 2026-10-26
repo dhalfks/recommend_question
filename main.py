@@ -62,6 +62,7 @@ app.include_router(billing.router, prefix="/api/billing", tags=["Billing"])
 
 # 헬스 체크
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",
