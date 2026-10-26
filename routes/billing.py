@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from models import BillingPlan, PaymentOrder, PaymentTransaction, User, UserRole, get_db
 from schemas.billing import (
     AdminPaymentActionResponse,
+    AdminAIUsageResponse,
     AdminRefundRequest,
     AdminPaymentResponse,
     RefundDecisionRequest,
@@ -40,10 +41,20 @@ from services.refund_requests import (
     refund_request_response,
 )
 from services.payment_webhooks import process_toss_payment_webhook
+from services.ai_usage_analytics import get_admin_ai_usage
 from services.toss_payments import TossPaymentError
 
 
 router = APIRouter()
+
+
+@router.get("/admin/ai-usage", response_model=AdminAIUsageResponse)
+def get_admin_ai_usage_report(
+    days: int = Query(default=30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return get_admin_ai_usage(db, days=days)
 
 
 @router.post("/webhooks/toss", response_model=PaymentWebhookResponse)

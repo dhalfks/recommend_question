@@ -31,6 +31,7 @@ export default function Navbar() {
           {user?.role === 'ADMIN' && (
             <>
               <Link href="/admin/billing" className="rounded-lg px-3 py-2 hover:bg-white/10">결제 관리</Link>
+              <Link href="/admin/ai-usage" className="rounded-lg px-3 py-2 hover:bg-white/10">AI 사용 분석</Link>
               <Link href="/admin/public-exams" className="rounded-lg px-3 py-2 hover:bg-white/10">공통 기출 관리</Link>
             </>
           )}

@@ -121,6 +121,26 @@ export type RefundRequest = {
   reviewed_at?: string | null;
 };
 
+export type AIUsageMetric = {
+  key: string;
+  label: string;
+  total_requests: number;
+  succeeded_requests: number;
+  failed_requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_krw: number;
+};
+
+export type AdminAIUsage = {
+  period_start: string;
+  period_end: string;
+  cost_configured: boolean;
+  summary: AIUsageMetric;
+  by_feature: AIUsageMetric[];
+  by_user: AIUsageMetric[];
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -343,6 +363,8 @@ export const billingAPI = {
     api.post<RefundRequest>(`/billing/admin/refund-requests/${requestId}/reject`, { reason }),
   adminPayments: (status?: BillingPayment['status']) =>
     api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
+  adminAIUsage: (days: number) =>
+    api.get<AdminAIUsage>('/billing/admin/ai-usage', { params: { days } }),
   closeAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>
