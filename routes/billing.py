@@ -7,6 +7,7 @@ from models import BillingPlan, PaymentOrder, PaymentTransaction, User, UserRole
 from schemas.billing import (
     AdminPaymentActionResponse,
     AdminAIUsageResponse,
+    AdminSubscriptionResponse,
     AdminRefundRequest,
     AdminPaymentResponse,
     RefundDecisionRequest,
@@ -20,6 +21,7 @@ from schemas.billing import (
     PaymentOrderCreate,
     PaymentOrderResponse,
     PaymentWebhookResponse,
+    SubscriptionExpiryResponse,
 )
 from services.billing import (
     close_unpaid_order,
@@ -42,6 +44,7 @@ from services.refund_requests import (
 )
 from services.payment_webhooks import process_toss_payment_webhook
 from services.ai_usage_analytics import get_admin_ai_usage
+from services.subscriptions import expire_due_subscriptions, list_admin_subscriptions
 from services.toss_payments import TossPaymentError
 
 
@@ -55,6 +58,30 @@ def get_admin_ai_usage_report(
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     return get_admin_ai_usage(db, days=days)
+
+
+@router.get("/admin/subscriptions", response_model=list[AdminSubscriptionResponse])
+def get_admin_subscriptions(
+    subscription_status: Literal["PENDING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"] | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return list_admin_subscriptions(
+        db, subscription_status=subscription_status, limit=limit
+    )
+
+
+@router.post("/admin/subscriptions/expire", response_model=SubscriptionExpiryResponse)
+def reconcile_expired_subscriptions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    expired_count = expire_due_subscriptions(db)
+    return {
+        "expired_count": expired_count,
+        "message": f"기간이 종료된 이용권 {expired_count}건을 만료 처리했습니다.",
+    }
 
 
 @router.post("/webhooks/toss", response_model=PaymentWebhookResponse)

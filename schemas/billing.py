@@ -162,3 +162,23 @@ class AdminAIUsageResponse(BaseModel):
     summary: AIUsageMetric
     by_feature: list[AIUsageMetric]
     by_user: list[AIUsageMetric]
+
+
+class AdminSubscriptionResponse(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    user_role: Literal["STUDENT", "PROFESSOR", "ADMIN"]
+    plan_code: str
+    plan_name: str
+    status: Literal["PENDING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"]
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
+    remaining_days: int
+    created_at: datetime
+
+
+class SubscriptionExpiryResponse(BaseModel):
+    expired_count: int
+    message: str

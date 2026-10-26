@@ -141,6 +141,21 @@ export type AdminAIUsage = {
   by_user: AIUsageMetric[];
 };
 
+export type AdminSubscription = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_role: UserRole;
+  plan_code: string;
+  plan_name: string;
+  status: 'PENDING' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED';
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  remaining_days: number;
+  created_at: string;
+};
+
 export type ProfessorOption = {
   id: number;
   name: string;
@@ -365,6 +380,10 @@ export const billingAPI = {
     api.get<AdminBillingPayment[]>('/billing/admin/payments', { params: status ? { status } : undefined }),
   adminAIUsage: (days: number) =>
     api.get<AdminAIUsage>('/billing/admin/ai-usage', { params: { days } }),
+  adminSubscriptions: (status?: AdminSubscription['status']) =>
+    api.get<AdminSubscription[]>('/billing/admin/subscriptions', { params: status ? { status } : undefined }),
+  expireSubscriptions: () =>
+    api.post<{ expired_count: number; message: string }>('/billing/admin/subscriptions/expire'),
   closeAdminPayment: (orderId: string) =>
     api.post(`/billing/admin/payments/${encodeURIComponent(orderId)}/close`),
   recoverAdminPayment: (orderId: string) =>
